@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/walk_calculator.dart';
@@ -24,7 +25,7 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Walk History')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context)!.navHistory)),
       body: FutureBuilder<List<Walk>>(
         future: _walksFuture,
         builder: (context, snapshot) {
@@ -33,7 +34,8 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
           }
           final walks = snapshot.data!;
           if (walks.isEmpty) {
-            return const Center(child: Text('No walks yet'));
+            return Center(
+                child: Text(AppLocalizations.of(context)!.historyEmpty));
           }
           return ListView.builder(
             itemCount: walks.length,
@@ -60,9 +62,11 @@ class _WalkRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return ListTile(
       title: Text(_formatDate(walk.startTime)),
-      subtitle: Text('${_distanceKm(walk)} km · ${_duration(walk)}'),
+      subtitle: Text(
+          '${l10n.unitKm(_distanceKm(walk))} · ${_duration(walk, fallback: l10n.durationUnavailable)}'),
       onTap: onTap,
     );
   }
@@ -81,8 +85,8 @@ class _WalkRow extends StatelessWidget {
     return (metres / 1000).toStringAsFixed(2);
   }
 
-  static String _duration(Walk walk) {
-    if (walk.endTime == null) return '--';
+  static String _duration(Walk walk, {required String fallback}) {
+    if (walk.endTime == null) return fallback;
     final diff = walk.endTime!.difference(walk.startTime);
     final h = diff.inHours;
     final m = diff.inMinutes.remainder(60).toString().padLeft(2, '0');

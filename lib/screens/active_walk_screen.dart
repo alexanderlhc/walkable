@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
@@ -50,7 +51,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     if (!mounted) return;
     if (result == LocationServiceResult.permissionDenied) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Location permission denied')),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.locationPermissionDenied),
+        ),
       );
       return;
     }
@@ -66,6 +69,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final points = _snapshot?.polyline
             .map((c) => LatLng(c.lat, c.lng))
             .toList() ??
@@ -73,11 +77,11 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Walkable'),
+        title: Text(l10n.appTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.history),
-            tooltip: 'Walk History',
+            tooltip: l10n.navHistory,
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
                 builder: (_) =>
@@ -119,13 +123,13 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
           ? FloatingActionButton.extended(
               key: const Key('start_button'),
               onPressed: _onStart,
-              label: const Text('Start'),
+              label: Text(l10n.actionStart),
               icon: const Icon(Icons.play_arrow),
             )
           : FloatingActionButton.extended(
               key: const Key('stop_button'),
               onPressed: _onStop,
-              label: const Text('Stop'),
+              label: Text(l10n.actionStop),
               icon: const Icon(Icons.stop),
               backgroundColor: Colors.red,
             ),
@@ -140,6 +144,7 @@ class _StatsOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     final dist = snapshot?.distanceMetres ?? 0.0;
     final elapsed = snapshot?.elapsed ?? Duration.zero;
     final paceVal = snapshot?.paceMinPerKm ?? double.infinity;
@@ -155,16 +160,16 @@ class _StatsOverlay extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _StatItem(
-                label: 'Distance',
-                value: '${(dist / 1000).toStringAsFixed(2)} km',
+                label: l10n.statDistance,
+                value: l10n.unitKm((dist / 1000).toStringAsFixed(2)),
               ),
               _StatItem(
-                label: 'Elapsed',
+                label: l10n.statElapsed,
                 value: _formatDuration(elapsed),
               ),
               _StatItem(
-                label: 'Pace',
-                value: _formatPace(paceVal),
+                label: l10n.statPace,
+                value: _formatPace(paceVal, fallback: l10n.paceUnavailable),
               ),
             ],
           ),
@@ -180,8 +185,8 @@ class _StatsOverlay extends StatelessWidget {
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
-  static String _formatPace(double p) {
-    if (p == double.infinity || p == 0.0) return '--:--';
+  static String _formatPace(double p, {required String fallback}) {
+    if (p == double.infinity || p == 0.0) return fallback;
     final totalSeconds = (p * 60).round();
     final m = totalSeconds ~/ 60;
     final s = (totalSeconds % 60).toString().padLeft(2, '0');

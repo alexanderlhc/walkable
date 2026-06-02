@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/walk_calculator.dart';
 
@@ -24,7 +25,7 @@ class WalkDetailScreen extends StatelessWidget {
     final paceValue = pace(distanceMetres, duration);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Walk Detail')),
+      appBar: AppBar(title: Text(AppLocalizations.of(context)!.screenWalkDetail)),
       body: Column(
         children: [
           Expanded(
@@ -88,8 +89,8 @@ class _StatsPanel extends StatelessWidget {
     return h > 0 ? '$h:$m:$s' : '$m:$s';
   }
 
-  String _formatPace(double p) {
-    if (p == double.infinity || p == 0.0) return '--:--';
+  String _formatPace(double p, {required String fallback}) {
+    if (p == double.infinity || p == 0.0) return fallback;
     final totalSeconds = (p * 60).round();
     final m = totalSeconds ~/ 60;
     final s = (totalSeconds % 60).toString().padLeft(2, '0');
@@ -98,22 +99,23 @@ class _StatsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _StatItem(
-            label: 'Distance',
-            value: '${(distanceMetres / 1000).toStringAsFixed(2)} km',
+            label: l10n.statDistance,
+            value: l10n.unitKm((distanceMetres / 1000).toStringAsFixed(2)),
           ),
           _StatItem(
-            label: 'Duration',
+            label: l10n.statDuration,
             value: _formatDuration(duration),
           ),
           _StatItem(
-            label: 'Pace',
-            value: _formatPace(paceMinPerKm),
+            label: l10n.statPace,
+            value: _formatPace(paceMinPerKm, fallback: l10n.paceUnavailable),
           ),
         ],
       ),

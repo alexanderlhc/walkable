@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
@@ -32,6 +33,8 @@ void main() {
   tearDown(() => snapshotsCtrl.close());
 
   Widget buildSubject() => MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
         home: ActiveWalkScreen(recorder: recorder, repository: repository),
       );
 

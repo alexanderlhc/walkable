@@ -1,0 +1,22 @@
+{
+  "@@locale": "en",
+  "appTitle": "Walkable",
+  "navHistory": "Walk History",
+  "actionStart": "Start",
+  "actionStop": "Stop",
+  "statDistance": "Distance",
+  "statElapsed": "Elapsed",
+  "statDuration": "Duration",
+  "statPace": "Pace",
+  "paceUnavailable": "--:--",
+  "durationUnavailable": "--",
+  "historyEmpty": "No walks yet",
+  "screenWalkDetail": "Walk Detail",
+  "locationPermissionDenied": "Location permission denied",
+  "unitKm": "{value} km",
+  "@unitKm": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  }
+}
