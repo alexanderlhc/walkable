@@ -27,6 +27,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   WalkSnapshot? _snapshot;
   late RecorderState _recorderState;
   late StreamSubscription<WalkSnapshot> _sub;
+  final MapController _mapController = MapController();
 
   @override
   void initState() {
@@ -43,7 +44,14 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   @override
   void dispose() {
     _sub.cancel();
+    _mapController.dispose();
     super.dispose();
+  }
+
+  void _onRecentre() {
+    final last = _snapshot?.polyline.lastOrNull;
+    if (last == null) return;
+    _mapController.move(LatLng(last.lat, last.lng), _mapController.camera.zoom);
   }
 
   Future<void> _onStart() async {
@@ -94,6 +102,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       body: Stack(
         children: [
           FlutterMap(
+            mapController: _mapController,
             options: const MapOptions(
               initialCenter: LatLng(55.6761, 12.5683),
               initialZoom: 15,
@@ -117,6 +126,16 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
             ],
           ),
           _StatsOverlay(snapshot: _snapshot),
+          if (_recorderState == RecorderState.recording)
+            Positioned(
+              top: 16,
+              right: 16,
+              child: FloatingActionButton.small(
+                key: const Key('recenter_button'),
+                onPressed: _onRecentre,
+                child: const Icon(Icons.my_location),
+              ),
+            ),
         ],
       ),
       floatingActionButton: _recorderState == RecorderState.idle

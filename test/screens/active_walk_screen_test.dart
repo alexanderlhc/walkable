@@ -56,6 +56,21 @@ void main() {
     expect(find.byKey(const Key('start_button')), findsNothing);
   });
 
+  testWidgets('re-centre button hidden in idle state', (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    expect(find.byKey(const Key('recenter_button')), findsNothing);
+  });
+
+  testWidgets('re-centre button visible during recording', (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('recenter_button')), findsOneWidget);
+  });
+
   testWidgets('stats update when recorder emits a snapshot', (tester) async {
     await tester.pumpWidget(buildSubject());
 
