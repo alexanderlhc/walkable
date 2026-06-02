@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:walkable/location/location_service.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
 import 'package:walkable/walk_recorder.dart';
@@ -44,14 +45,23 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     super.dispose();
   }
 
-  void _onStart() {
-    widget.recorder.start();
+  Future<void> _onStart() async {
+    final result = await widget.recorder.start();
+    if (!mounted) return;
+    if (result == LocationServiceResult.permissionDenied) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Location permission denied')),
+      );
+      return;
+    }
     setState(() => _recorderState = RecorderState.recording);
   }
 
   Future<void> _onStop() async {
     await widget.recorder.stop();
-    setState(() => _recorderState = RecorderState.stopped);
+    widget.recorder.reset();
+    if (!mounted) return;
+    setState(() => _recorderState = RecorderState.idle);
   }
 
   @override

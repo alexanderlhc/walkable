@@ -43,11 +43,16 @@ class WalkRecorder {
   })  : _locationService = locationService,
         _repository = repository;
 
-  void start() {
-    if (_state != RecorderState.idle) return;
+  Future<LocationServiceResult> start() async {
+    if (_state != RecorderState.idle) return LocationServiceResult.running;
+    final result = await _locationService.start();
+    if (result == LocationServiceResult.permissionDenied) {
+      return LocationServiceResult.permissionDenied;
+    }
     _state = RecorderState.recording;
     _startTime = DateTime.now();
     _subscription = _locationService.positions.listen(_onPosition);
+    return LocationServiceResult.started;
   }
 
   Future<void> stop() async {
@@ -55,6 +60,7 @@ class WalkRecorder {
     _state = RecorderState.stopped;
     await _subscription?.cancel();
     _subscription = null;
+    await _locationService.stop();
 
     final endTime = DateTime.now();
     _snapshots.add(_buildSnapshot(endTime));
@@ -66,6 +72,13 @@ class WalkRecorder {
       coordinates: List.of(_coordinates),
     );
     await _repository.save(walk);
+  }
+
+  void reset() {
+    if (_state != RecorderState.stopped) return;
+    _state = RecorderState.idle;
+    _startTime = null;
+    _coordinates.clear();
   }
 
   void dispose() {

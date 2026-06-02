@@ -11,6 +11,12 @@ class _StubLocationService extends LocationService {
       StreamController<Position>.broadcast();
 
   @override
+  Future<LocationServiceResult> start() async => LocationServiceResult.started;
+
+  @override
+  Future<void> stop() async {}
+
+  @override
   Stream<Position> get positions => _ctrl.stream;
 
   void emit(Position pos) => _ctrl.add(pos);
@@ -58,8 +64,8 @@ void main() {
     expect(recorder.state, RecorderState.idle);
   });
 
-  test('start transitions to recording', () {
-    recorder.start();
+  test('start transitions to recording', () async {
+    await recorder.start();
     expect(recorder.state, RecorderState.recording);
   });
 
@@ -69,13 +75,20 @@ void main() {
   });
 
   test('stop transitions to stopped', () async {
-    recorder.start();
+    await recorder.start();
     await recorder.stop();
     expect(recorder.state, RecorderState.stopped);
   });
 
+  test('reset after stop returns to idle', () async {
+    await recorder.start();
+    await recorder.stop();
+    recorder.reset();
+    expect(recorder.state, RecorderState.idle);
+  });
+
   test('each position updates polyline and distance in snapshot', () async {
-    recorder.start();
+    await recorder.start();
 
     final snapshots = <WalkSnapshot>[];
     final sub = recorder.snapshots.listen(snapshots.add);
@@ -95,7 +108,7 @@ void main() {
   });
 
   test('snapshot exposes distance, elapsed, pace, and polyline', () async {
-    recorder.start();
+    await recorder.start();
 
     WalkSnapshot? latest;
     final sub = recorder.snapshots.listen((s) => latest = s);
@@ -114,7 +127,7 @@ void main() {
   });
 
   test('stop emits final snapshot and saves walk to repository', () async {
-    recorder.start();
+    await recorder.start();
 
     location.emit(_pos(55.676, 12.568));
     location.emit(_pos(55.677, 12.569));

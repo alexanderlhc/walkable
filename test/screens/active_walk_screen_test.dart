@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:walkable/location/location_service.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
 import 'package:walkable/walk_recorder.dart';
@@ -23,8 +24,9 @@ void main() {
 
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => snapshotsCtrl.stream);
-    when(() => recorder.start()).thenAnswer((_) {});
+    when(() => recorder.start()).thenAnswer((_) async => LocationServiceResult.started);
     when(() => recorder.stop()).thenAnswer((_) async {});
+    when(() => recorder.reset()).thenReturn(null);
   });
 
   tearDown(() => snapshotsCtrl.close());
