@@ -21,6 +21,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionStop => 'Stop';
 
   @override
+  String get actionPause => 'Pause';
+
+  @override
+  String get actionResume => 'Resume';
+
+  @override
   String get statDistance => 'Distance';
 
   @override

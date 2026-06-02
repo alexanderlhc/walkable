@@ -126,6 +126,65 @@ void main() {
     expect(latest!.polyline.length, 2);
   });
 
+  test('pause transitions recording to paused', () async {
+    await recorder.start();
+    await recorder.pause();
+    expect(recorder.state, RecorderState.paused);
+  });
+
+  test('resume transitions paused to recording', () async {
+    await recorder.start();
+    await recorder.pause();
+    await recorder.resume();
+    expect(recorder.state, RecorderState.recording);
+  });
+
+  test('stop from paused transitions to stopped', () async {
+    await recorder.start();
+    await recorder.pause();
+    await recorder.stop();
+    expect(recorder.state, RecorderState.stopped);
+  });
+
+  test('no coordinates added while paused', () async {
+    await recorder.start();
+    await recorder.pause();
+
+    location.emit(_pos(55.676, 12.568));
+    await Future<void>.delayed(Duration.zero);
+
+    await recorder.stop();
+    final walks = await repository.findAll();
+    expect(walks[0].coordinates, isEmpty);
+  });
+
+  test('elapsed does not grow during pause gap', () async {
+    await recorder.start();
+
+    final snapshots = <WalkSnapshot>[];
+    final sub = recorder.snapshots.listen(snapshots.add);
+
+    location.emit(_pos(55.676, 12.568));
+    await Future<void>.delayed(Duration.zero);
+
+    final elapsedAtPause = snapshots.last.elapsed;
+    await recorder.pause();
+
+    // simulate a pause gap
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    await recorder.resume();
+    location.emit(_pos(55.677, 12.569));
+    await Future<void>.delayed(Duration.zero);
+
+    await sub.cancel();
+
+    // elapsed should only have grown by the tiny gap between resume and emit,
+    // not by the 50ms pause gap
+    expect(snapshots.last.elapsed - elapsedAtPause,
+        lessThan(const Duration(milliseconds: 40)));
+  });
+
   test('stop emits final snapshot and saves walk to repository', () async {
     await recorder.start();
 

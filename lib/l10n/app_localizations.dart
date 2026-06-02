@@ -117,6 +117,18 @@ abstract class AppLocalizations {
   /// **'Stop'**
   String get actionStop;
 
+  /// No description provided for @actionPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get actionPause;
+
+  /// No description provided for @actionResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get actionResume;
+
   /// No description provided for @statDistance.
   ///
   /// In en, this message translates to:

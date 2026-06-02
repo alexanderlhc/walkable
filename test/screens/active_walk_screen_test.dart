@@ -26,6 +26,8 @@ void main() {
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => snapshotsCtrl.stream);
     when(() => recorder.start()).thenAnswer((_) async => LocationServiceResult.started);
+    when(() => recorder.pause()).thenAnswer((_) async {});
+    when(() => recorder.resume()).thenAnswer((_) async {});
     when(() => recorder.stop()).thenAnswer((_) async {});
     when(() => recorder.reset()).thenReturn(null);
   });
@@ -69,6 +71,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('recenter_button')), findsOneWidget);
+  });
+
+  testWidgets('Pause and Stop buttons visible during recording', (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('pause_button')), findsOneWidget);
+    expect(find.byKey(const Key('stop_button')), findsOneWidget);
+    expect(find.byKey(const Key('start_button')), findsNothing);
+    expect(find.byKey(const Key('resume_button')), findsNothing);
+  });
+
+  testWidgets('Resume and Stop buttons visible while paused', (tester) async {
+    await tester.pumpWidget(buildSubject());
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    when(() => recorder.state).thenReturn(RecorderState.paused);
+    await tester.tap(find.byKey(const Key('pause_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('resume_button')), findsOneWidget);
+    expect(find.byKey(const Key('stop_button')), findsOneWidget);
+    expect(find.byKey(const Key('pause_button')), findsNothing);
+    expect(find.byKey(const Key('start_button')), findsNothing);
   });
 
   testWidgets('stats update when recorder emits a snapshot', (tester) async {

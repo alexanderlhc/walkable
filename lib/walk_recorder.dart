@@ -6,7 +6,7 @@ import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/walk_calculator.dart';
 
-enum RecorderState { idle, recording, stopped }
+enum RecorderState { idle, recording, paused, stopped }
 
 class WalkSnapshot {
   final double distanceMetres;
@@ -30,6 +30,8 @@ class WalkRecorder {
   RecorderState get state => _state;
 
   DateTime? _startTime;
+  DateTime? _periodStart;
+  Duration _accumulatedDuration = Duration.zero;
   final List<Coordinate> _coordinates = [];
   StreamSubscription<Position>? _subscription;
 
@@ -51,16 +53,39 @@ class WalkRecorder {
     }
     _state = RecorderState.recording;
     _startTime = DateTime.now();
+    _periodStart = _startTime;
     _subscription = _locationService.positions.listen(_onPosition);
     return LocationServiceResult.started;
   }
 
-  Future<void> stop() async {
+  Future<void> pause() async {
     if (_state != RecorderState.recording) return;
-    _state = RecorderState.stopped;
+    final now = DateTime.now();
+    _accumulatedDuration += now.difference(_periodStart!);
+    _periodStart = null;
+    _state = RecorderState.paused;
     await _subscription?.cancel();
     _subscription = null;
     await _locationService.stop();
+    _snapshots.add(_buildSnapshot(now));
+  }
+
+  Future<void> resume() async {
+    if (_state != RecorderState.paused) return;
+    _state = RecorderState.recording;
+    _periodStart = DateTime.now();
+    await _locationService.start();
+    _subscription = _locationService.positions.listen(_onPosition);
+  }
+
+  Future<void> stop() async {
+    if (_state != RecorderState.recording && _state != RecorderState.paused) {
+      return;
+    }
+    await _subscription?.cancel();
+    _subscription = null;
+    await _locationService.stop();
+    _state = RecorderState.stopped;
 
     final endTime = DateTime.now();
     _snapshots.add(_buildSnapshot(endTime));
@@ -78,6 +103,8 @@ class WalkRecorder {
     if (_state != RecorderState.stopped) return;
     _state = RecorderState.idle;
     _startTime = null;
+    _periodStart = null;
+    _accumulatedDuration = Duration.zero;
     _coordinates.clear();
   }
 
@@ -98,7 +125,9 @@ class WalkRecorder {
   WalkSnapshot _buildSnapshot(DateTime now) {
     final polyline = _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
     final dist = totalDistance(polyline);
-    final elapsed = now.difference(_startTime!);
+    final elapsed = _periodStart != null
+        ? _accumulatedDuration + now.difference(_periodStart!)
+        : _accumulatedDuration;
     return WalkSnapshot(
       distanceMetres: dist,
       elapsed: elapsed,

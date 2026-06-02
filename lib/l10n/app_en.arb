@@ -4,6 +4,8 @@
   "navHistory": "Walk History",
   "actionStart": "Start",
   "actionStop": "Stop",
+  "actionPause": "Pause",
+  "actionResume": "Resume",
   "statDistance": "Distance",
   "statElapsed": "Elapsed",
   "statDuration": "Duration",

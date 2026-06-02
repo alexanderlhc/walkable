@@ -68,6 +68,18 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     setState(() => _recorderState = RecorderState.recording);
   }
 
+  Future<void> _onPause() async {
+    await widget.recorder.pause();
+    if (!mounted) return;
+    setState(() => _recorderState = RecorderState.paused);
+  }
+
+  Future<void> _onResume() async {
+    await widget.recorder.resume();
+    if (!mounted) return;
+    setState(() => _recorderState = RecorderState.recording);
+  }
+
   Future<void> _onStop() async {
     await widget.recorder.stop();
     widget.recorder.reset();
@@ -145,12 +157,32 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
               label: Text(l10n.actionStart),
               icon: const Icon(Icons.play_arrow),
             )
-          : FloatingActionButton.extended(
-              key: const Key('stop_button'),
-              onPressed: _onStop,
-              label: Text(l10n.actionStop),
-              icon: const Icon(Icons.stop),
-              backgroundColor: Colors.red,
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_recorderState == RecorderState.recording)
+                  FloatingActionButton.extended(
+                    key: const Key('pause_button'),
+                    onPressed: _onPause,
+                    label: Text(l10n.actionPause),
+                    icon: const Icon(Icons.pause),
+                  )
+                else
+                  FloatingActionButton.extended(
+                    key: const Key('resume_button'),
+                    onPressed: _onResume,
+                    label: Text(l10n.actionResume),
+                    icon: const Icon(Icons.play_arrow),
+                  ),
+                const SizedBox(height: 8),
+                FloatingActionButton.extended(
+                  key: const Key('stop_button'),
+                  onPressed: _onStop,
+                  label: Text(l10n.actionStop),
+                  icon: const Icon(Icons.stop),
+                  backgroundColor: Colors.red,
+                ),
+              ],
             ),
     );
   }
