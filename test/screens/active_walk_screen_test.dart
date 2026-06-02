@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
-import 'package:walkable/walk_calculator.dart';
 import 'package:walkable/walk_recorder.dart';
 
 class MockWalkRecorder extends Mock implements WalkRecorder {}

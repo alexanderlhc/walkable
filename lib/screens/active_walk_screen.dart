@@ -5,7 +5,6 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
-import 'package:walkable/walk_calculator.dart';
 import 'package:walkable/walk_recorder.dart';
 
 class ActiveWalkScreen extends StatefulWidget {
