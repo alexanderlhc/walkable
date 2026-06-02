@@ -1,2 +1,0 @@
-/home/alexander/code/walkable/android/app/.cxx/debug/4xw245g6/x86_64/CMakeFiles/edit_cache.dir
-/home/alexander/code/walkable/android/app/.cxx/debug/4xw245g6/x86_64/CMakeFiles/rebuild_cache.dir
