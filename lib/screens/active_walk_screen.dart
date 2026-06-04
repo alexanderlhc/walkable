@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -153,22 +154,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
             .toList() ??
         [];
 
+    final topPadding = MediaQuery.of(context).padding.top + 12;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.appTitle),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: l10n.navHistory,
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) =>
-                    WalkHistoryScreen(repository: widget.repository),
-              ),
-            ),
-          ),
-        ],
-      ),
       body: Stack(
         children: [
           FlutterMap(
@@ -208,134 +196,393 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                 ),
             ],
           ),
-          _StatsOverlay(snapshot: _snapshot),
+          _BottomPanel(
+            state: _recorderState,
+            snapshot: _snapshot,
+            onStart: _onStart,
+            onPause: _onPause,
+            onResume: _onResume,
+            onStop: _onStop,
+          ),
+          // History pill — top left
+          Positioned(
+            top: topPadding,
+            left: 12,
+            child: _MapChip(
+              key: const Key('history_button'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      WalkHistoryScreen(repository: widget.repository),
+                ),
+              ),
+              icon: const Icon(Icons.history, size: 18),
+              label: Text(l10n.navHistory),
+            ),
+          ),
+          // Re-centre — top right, only when dot is off-screen
           if (_locationPermissionGranted && _positionOutOfView)
             Positioned(
-              top: 16,
-              right: 16,
-              child: FloatingActionButton.small(
+              top: topPadding,
+              right: 12,
+              child: _MapChip(
                 key: const Key('recenter_button'),
                 onPressed: _recentring ? null : _onRecentre,
-                child: _recentring
+                icon: _recentring
                     ? const SizedBox(
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Icon(Icons.my_location),
+                    : const Icon(Icons.my_location, size: 18),
               ),
             ),
         ],
       ),
-      floatingActionButton: _recorderState == RecorderState.idle
-          ? FloatingActionButton.extended(
-              key: const Key('start_button'),
-              onPressed: _onStart,
-              label: Text(l10n.actionStart),
-              icon: const Icon(Icons.play_arrow),
-            )
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_recorderState == RecorderState.recording)
-                  FloatingActionButton.extended(
-                    key: const Key('pause_button'),
-                    onPressed: _onPause,
-                    label: Text(l10n.actionPause),
-                    icon: const Icon(Icons.pause),
-                  )
-                else
-                  FloatingActionButton.extended(
-                    key: const Key('resume_button'),
-                    onPressed: _onResume,
-                    label: Text(l10n.actionResume),
-                    icon: const Icon(Icons.play_arrow),
-                  ),
-                const SizedBox(height: 8),
-                FloatingActionButton.extended(
-                  key: const Key('stop_button'),
-                  onPressed: _onStop,
-                  label: Text(l10n.actionStop),
-                  icon: const Icon(Icons.stop),
-                  backgroundColor: Colors.red,
-                ),
-              ],
-            ),
     );
   }
 }
 
-class _StatsOverlay extends StatelessWidget {
-  final WalkSnapshot? snapshot;
+// ─── Bottom control panel ────────────────────────────────────────────────────
+// Single frosted-glass surface that owns both stats and controls.
+// Nothing outside this widget touches the bottom of the screen.
 
-  const _StatsOverlay({required this.snapshot});
+class _BottomPanel extends StatelessWidget {
+  final RecorderState state;
+  final WalkSnapshot? snapshot;
+  final VoidCallback onStart;
+  final VoidCallback onPause;
+  final VoidCallback onResume;
+  final VoidCallback onStop;
+
+  const _BottomPanel({
+    required this.state,
+    required this.snapshot,
+    required this.onStart,
+    required this.onPause,
+    required this.onResume,
+    required this.onStop,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
     final l10n = AppLocalizations.of(context)!;
-    final dist = snapshot?.distanceMetres ?? 0.0;
-    final elapsed = snapshot?.elapsed ?? Duration.zero;
-    final paceVal = snapshot?.paceMinPerKm ?? double.infinity;
 
     return Positioned(
-      bottom: 88,
-      left: 16,
-      right: 16,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _StatItem(
-                label: l10n.statDistance,
-                value: l10n.unitKm((dist / 1000).toStringAsFixed(2)),
+      bottom: 0,
+      left: 0,
+      right: 0,
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.88),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border(
+                top: BorderSide(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  width: 0.5,
+                ),
               ),
-              _StatItem(
-                label: l10n.statElapsed,
-                value: _formatDuration(elapsed),
-              ),
-              _StatItem(
-                label: l10n.statPace,
-                value: _formatPace(paceVal, fallback: l10n.paceUnavailable),
-              ),
-            ],
+            ),
+            padding: EdgeInsets.fromLTRB(24, 20, 24, 20 + bottomInset),
+            child: state == RecorderState.idle
+                ? _buildIdle(l10n)
+                : _buildActive(l10n),
           ),
         ),
       ),
     );
   }
 
-  static String _formatDuration(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  Widget _buildIdle(AppLocalizations l10n) {
+    return GestureDetector(
+      key: const Key('start_button'),
+      onTap: onStart,
+      child: Container(
+        height: 58,
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(29),
+        ),
+        alignment: Alignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
+            const SizedBox(width: 8),
+            Text(
+              l10n.actionStart.toUpperCase(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  static String _formatPace(double p, {required String fallback}) {
-    if (p == double.infinity || p == 0.0) return fallback;
-    final totalSeconds = (p * 60).round();
-    final m = totalSeconds ~/ 60;
-    final s = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s /km';
-  }
-}
+  Widget _buildActive(AppLocalizations l10n) {
+    final isRecording = state == RecorderState.recording;
+    final dist = snapshot?.distanceMetres ?? 0.0;
+    final elapsed = snapshot?.elapsed ?? Duration.zero;
+    final pace = snapshot?.paceMinPerKm ?? double.infinity;
 
-class _StatItem extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _StatItem({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: Theme.of(context).textTheme.labelSmall),
-        Text(value, style: Theme.of(context).textTheme.titleMedium),
+        // Status indicator
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isRecording
+                    ? const Color(0xFF34C759)
+                    : const Color(0xFFFF9F0A),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isRecording ? 'RECORDING' : 'PAUSED',
+              style: TextStyle(
+                color: Colors.black.withValues(alpha: 0.40),
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        // Stats row
+        IntrinsicHeight(
+          child: Row(
+            children: [
+              _StatBlock(
+                label: l10n.statDistance,
+                value: (dist / 1000).toStringAsFixed(2),
+                unit: 'km',
+              ),
+              VerticalDivider(
+                  color: Colors.black.withValues(alpha: 0.10), width: 1),
+              _StatBlock(
+                label: l10n.statElapsed,
+                value: _fmtDuration(elapsed),
+                unit: null,
+              ),
+              VerticalDivider(
+                  color: Colors.black.withValues(alpha: 0.10), width: 1),
+              _StatBlock(
+                label: l10n.statPace,
+                value: _fmtPace(pace),
+                unit: pace.isFinite ? '/km' : null,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        // Controls
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _PanelButton(
+              key: isRecording
+                  ? const Key('pause_button')
+                  : const Key('resume_button'),
+              onTap: isRecording ? onPause : onResume,
+              size: 52,
+              outlined: true,
+              child: Icon(
+                isRecording ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                color: Colors.black,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 20),
+            _PanelButton(
+              key: const Key('stop_button'),
+              onTap: onStop,
+              size: 64,
+              color: const Color(0xFFFF3B30),
+              child: const Icon(Icons.stop_rounded, color: Colors.white, size: 28),
+            ),
+          ],
+        ),
       ],
     );
   }
+
+  static String _fmtDuration(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return d.inHours > 0 ? '${d.inHours}:$m:$s' : '$m:$s';
+  }
+
+  static String _fmtPace(double p) {
+    if (!p.isFinite || p == 0) return '--:--';
+    final total = (p * 60).round();
+    return '${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')}';
+  }
 }
+
+class _StatBlock extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? unit;
+
+  const _StatBlock({required this.label, required this.value, this.unit});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              color: Colors.black.withValues(alpha: 0.40),
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 1.1,
+            ),
+          ),
+          const SizedBox(height: 5),
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: value,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                    height: 1,
+                  ),
+                ),
+                if (unit != null)
+                  TextSpan(
+                    text: ' $unit',
+                    style: TextStyle(
+                      color: Colors.black.withValues(alpha: 0.40),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      height: 1,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PanelButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final double size;
+  final bool outlined;
+  final Color? color;
+  final Widget child;
+
+  const _PanelButton({
+    super.key,
+    required this.onTap,
+    required this.size,
+    required this.child,
+    this.outlined = false,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color ?? Colors.transparent,
+          border: outlined
+              ? Border.all(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  width: 1.5,
+                )
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _MapChip extends StatelessWidget {
+  final VoidCallback? onPressed;
+  final Widget icon;
+  final Widget? label;
+
+  const _MapChip({
+    super.key,
+    required this.onPressed,
+    required this.icon,
+    this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Theme.of(context).colorScheme.surface,
+      borderRadius: BorderRadius.circular(24),
+      elevation: 4,
+      shadowColor: Colors.black45,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: EdgeInsets.symmetric(
+            horizontal: label != null ? 12 : 10,
+            vertical: 10,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconTheme(
+                data: IconThemeData(
+                  color: Theme.of(context).colorScheme.onSurface,
+                  size: 18,
+                ),
+                child: icon,
+              ),
+              if (label != null) ...[
+                const SizedBox(width: 6),
+                DefaultTextStyle(
+                  style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface,
+                      ),
+                  child: label!,
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

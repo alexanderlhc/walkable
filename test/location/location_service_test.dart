@@ -127,4 +127,73 @@ void main() {
       expect(await future, [p1, p2]);
     });
   });
+
+  group('checkAndRequestPermission()', () {
+    test('returns true when permission already granted', () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.always);
+
+      expect(await service.checkAndRequestPermission(), isTrue);
+      verifyNever(() => mock.requestPermission());
+    });
+
+    test('returns true for whileInUse without requesting', () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      expect(await service.checkAndRequestPermission(), isTrue);
+      verifyNever(() => mock.requestPermission());
+    });
+
+    test('requests when denied; returns true if then granted', () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.denied);
+      when(() => mock.requestPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      expect(await service.checkAndRequestPermission(), isTrue);
+      verify(() => mock.requestPermission()).called(1);
+    });
+
+    test('returns false when still denied after request', () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.denied);
+      when(() => mock.requestPermission())
+          .thenAnswer((_) async => LocationPermission.denied);
+
+      expect(await service.checkAndRequestPermission(), isFalse);
+    });
+
+    test('returns false for deniedForever without requesting', () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.deniedForever);
+
+      expect(await service.checkAndRequestPermission(), isFalse);
+      verifyNever(() => mock.requestPermission());
+    });
+  });
+
+  group('getCurrentPosition()', () {
+    test('delegates to geolocator and returns position', () async {
+      final expected = _pos();
+      when(() => mock.getCurrentPosition(
+              locationSettings: any(named: 'locationSettings')))
+          .thenAnswer((_) async => expected);
+
+      expect(await service.getCurrentPosition(), expected);
+    });
+  });
+
+  group('watchPosition()', () {
+    test('returns position stream from geolocator', () async {
+      final p1 = _pos(lat: 55.1);
+      final p2 = _pos(lat: 55.2);
+
+      when(() => mock.getPositionStream(
+              locationSettings: any(named: 'locationSettings')))
+          .thenAnswer((_) => Stream.fromIterable([p1, p2]));
+
+      expect(await service.watchPosition().take(2).toList(), [p1, p2]);
+    });
+  });
 }
