@@ -169,7 +169,8 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
             children: [
               TileLayer(
                 urlTemplate:
-                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
+                subdomains: const ['a', 'b', 'c', 'd'],
                 userAgentPackageName: 'dk.alexanderlhc.walkable',
               ),
               if (points.length >= 2)
