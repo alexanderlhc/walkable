@@ -8,6 +8,7 @@ export 'package:geolocator/geolocator.dart' show Position;
 abstract interface class GeolocatorInterface {
   Future<LocationPermission> checkPermission();
   Future<LocationPermission> requestPermission();
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings});
   Stream<Position> getPositionStream({LocationSettings? locationSettings});
 }
 
@@ -19,6 +20,12 @@ class _DefaultGeolocator implements GeolocatorInterface {
   @override
   Future<LocationPermission> requestPermission() =>
       Geolocator.requestPermission();
+
+  @override
+  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) =>
+      Geolocator.getCurrentPosition(
+        locationSettings: locationSettings ?? const LocationSettings(),
+      );
 
   @override
   Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
@@ -40,17 +47,28 @@ class LocationService {
   Stream<Position> get positions => _controller.stream;
   bool get isRunning => _running;
 
-  Future<LocationServiceResult> start() async {
-    if (_running) return LocationServiceResult.running;
-
+  Future<bool> checkAndRequestPermission() async {
     var permission = await _geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await _geolocator.requestPermission();
     }
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      return LocationServiceResult.permissionDenied;
-    }
+    return permission != LocationPermission.denied &&
+        permission != LocationPermission.deniedForever;
+  }
+
+  Future<Position> getCurrentPosition() =>
+      _geolocator.getCurrentPosition();
+
+  Stream<Position> watchPosition() => _geolocator.getPositionStream(
+        locationSettings:
+            const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+
+  Future<LocationServiceResult> start() async {
+    if (_running) return LocationServiceResult.running;
+
+    final granted = await checkAndRequestPermission();
+    if (!granted) return LocationServiceResult.permissionDenied;
 
     _running = true;
     _subscription = _geolocator

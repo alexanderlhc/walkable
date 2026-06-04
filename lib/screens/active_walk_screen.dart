@@ -28,30 +28,88 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   late RecorderState _recorderState;
   late StreamSubscription<WalkSnapshot> _sub;
   final MapController _mapController = MapController();
+  bool _locationPermissionGranted = false;
+  bool _recentring = false;
+  LatLng? _currentPosition;
+  StreamSubscription<Position>? _positionSub;
+
+  bool get _positionOutOfView {
+    if (_currentPosition == null) return false;
+    try {
+      return !_mapController.camera.visibleBounds.contains(_currentPosition!);
+    } catch (_) {
+      return false;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _recorderState = widget.recorder.state;
     _sub = widget.recorder.snapshots.listen((snapshot) {
+      final last = snapshot.polyline.lastOrNull;
       setState(() {
         _snapshot = snapshot;
         _recorderState = widget.recorder.state;
+        if (last != null) _currentPosition = LatLng(last.lat, last.lng);
       });
+    });
+    _requestPermission();
+  }
+
+  Future<void> _requestPermission() async {
+    final granted =
+        await widget.recorder.locationService.checkAndRequestPermission();
+    if (!mounted) return;
+    setState(() => _locationPermissionGranted = granted);
+    if (!granted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content:
+              Text(AppLocalizations.of(context)!.locationPermissionDenied),
+        ),
+      );
+      return;
+    }
+    _positionSub = widget.recorder.locationService
+        .watchPosition()
+        .listen((pos) {
+      if (!mounted) return;
+      setState(
+          () => _currentPosition = LatLng(pos.latitude, pos.longitude));
     });
   }
 
   @override
   void dispose() {
     _sub.cancel();
+    _positionSub?.cancel();
     _mapController.dispose();
     super.dispose();
   }
 
-  void _onRecentre() {
-    final last = _snapshot?.polyline.lastOrNull;
-    if (last == null) return;
-    _mapController.move(LatLng(last.lat, last.lng), _mapController.camera.zoom);
+  Future<void> _onRecentre() async {
+    if (_currentPosition != null) {
+      _mapController.move(_currentPosition!, _mapController.camera.zoom);
+      return;
+    }
+    setState(() => _recentring = true);
+    try {
+      final pos = await widget.recorder.locationService.getCurrentPosition();
+      if (!mounted) return;
+      final latlng = LatLng(pos.latitude, pos.longitude);
+      setState(() {
+        _currentPosition = latlng;
+        _recentring = false;
+      });
+      _mapController.move(latlng, _mapController.camera.zoom);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _recentring = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not get location: $e')),
+      );
+    }
   }
 
   Future<void> _onStart() async {
@@ -115,9 +173,10 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         children: [
           FlutterMap(
             mapController: _mapController,
-            options: const MapOptions(
-              initialCenter: LatLng(55.6761, 12.5683),
+            options: MapOptions(
+              initialCenter: const LatLng(55.6761, 12.5683),
               initialZoom: 15,
+              onPositionChanged: (_, __) => setState(() {}),
             ),
             children: [
               TileLayer(
@@ -135,17 +194,35 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                     ),
                   ],
                 ),
+              if (_currentPosition != null)
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: _currentPosition!,
+                      radius: 8,
+                      color: Colors.blue,
+                      borderStrokeWidth: 2,
+                      borderColor: Colors.white,
+                    ),
+                  ],
+                ),
             ],
           ),
           _StatsOverlay(snapshot: _snapshot),
-          if (_recorderState == RecorderState.recording)
+          if (_locationPermissionGranted && _positionOutOfView)
             Positioned(
               top: 16,
               right: 16,
               child: FloatingActionButton.small(
                 key: const Key('recenter_button'),
-                onPressed: _onRecentre,
-                child: const Icon(Icons.my_location),
+                onPressed: _recentring ? null : _onRecentre,
+                child: _recentring
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.my_location),
               ),
             ),
         ],

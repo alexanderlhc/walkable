@@ -23,7 +23,7 @@ class WalkSnapshot {
 }
 
 class WalkRecorder {
-  final LocationService _locationService;
+  final LocationService locationService;
   final WalkRepository _repository;
 
   RecorderState _state = RecorderState.idle;
@@ -40,21 +40,20 @@ class WalkRecorder {
   Stream<WalkSnapshot> get snapshots => _snapshots.stream;
 
   WalkRecorder({
-    required LocationService locationService,
+    required this.locationService,
     required WalkRepository repository,
-  })  : _locationService = locationService,
-        _repository = repository;
+  }) : _repository = repository;
 
   Future<LocationServiceResult> start() async {
     if (_state != RecorderState.idle) return LocationServiceResult.running;
-    final result = await _locationService.start();
+    final result = await locationService.start();
     if (result == LocationServiceResult.permissionDenied) {
       return LocationServiceResult.permissionDenied;
     }
     _state = RecorderState.recording;
     _startTime = DateTime.now();
     _periodStart = _startTime;
-    _subscription = _locationService.positions.listen(_onPosition);
+    _subscription = locationService.positions.listen(_onPosition);
     return LocationServiceResult.started;
   }
 
@@ -66,7 +65,7 @@ class WalkRecorder {
     _state = RecorderState.paused;
     await _subscription?.cancel();
     _subscription = null;
-    await _locationService.stop();
+    await locationService.stop();
     _snapshots.add(_buildSnapshot(now));
   }
 
@@ -74,8 +73,8 @@ class WalkRecorder {
     if (_state != RecorderState.paused) return;
     _state = RecorderState.recording;
     _periodStart = DateTime.now();
-    await _locationService.start();
-    _subscription = _locationService.positions.listen(_onPosition);
+    await locationService.start();
+    _subscription = locationService.positions.listen(_onPosition);
   }
 
   Future<void> stop() async {
@@ -84,7 +83,7 @@ class WalkRecorder {
     }
     await _subscription?.cancel();
     _subscription = null;
-    await _locationService.stop();
+    await locationService.stop();
     _state = RecorderState.stopped;
 
     final endTime = DateTime.now();
