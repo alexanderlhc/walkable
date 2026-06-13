@@ -34,6 +34,7 @@ class WalkRecorder {
   Duration _accumulatedDuration = Duration.zero;
   final List<Coordinate> _coordinates = [];
   StreamSubscription<Position>? _subscription;
+  ForegroundNotificationText? _notification;
 
   final StreamController<WalkSnapshot> _snapshots =
       StreamController<WalkSnapshot>.broadcast();
@@ -44,9 +45,12 @@ class WalkRecorder {
     required WalkRepository repository,
   }) : _repository = repository;
 
-  Future<LocationServiceResult> start() async {
+  Future<LocationServiceResult> start({
+    ForegroundNotificationText? notification,
+  }) async {
     if (_state != RecorderState.idle) return LocationServiceResult.running;
-    final result = await locationService.start();
+    _notification = notification;
+    final result = await locationService.start(notification: notification);
     if (result == LocationServiceResult.permissionDenied) {
       return LocationServiceResult.permissionDenied;
     }
@@ -73,7 +77,7 @@ class WalkRecorder {
     if (_state != RecorderState.paused) return;
     _state = RecorderState.recording;
     _periodStart = DateTime.now();
-    await locationService.start();
+    await locationService.start(notification: _notification);
     _subscription = locationService.positions.listen(_onPosition);
   }
 

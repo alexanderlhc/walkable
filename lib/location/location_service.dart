@@ -57,6 +57,14 @@ class _DefaultGeolocator implements GeolocatorInterface {
 
 enum LocationServiceResult { started, running, permissionDenied }
 
+/// Localized copy for the Android foreground-service notification.
+class ForegroundNotificationText {
+  final String title;
+  final String body;
+
+  const ForegroundNotificationText({required this.title, required this.body});
+}
+
 class LocationService {
   LocationService({
     GeolocatorInterface? geolocator,
@@ -101,7 +109,11 @@ class LocationService {
             const LocationSettings(accuracy: LocationAccuracy.high),
       );
 
-  Future<LocationServiceResult> start() async {
+  /// [notification] supplies the localized title/body for the Android
+  /// foreground-service notification. Required on Android; ignored elsewhere.
+  Future<LocationServiceResult> start({
+    ForegroundNotificationText? notification,
+  }) async {
     if (_running) return LocationServiceResult.running;
 
     final granted = await checkAndRequestPermission();
@@ -115,7 +127,7 @@ class LocationService {
 
     _running = true;
     _subscription = _geolocator
-        .getPositionStream(locationSettings: _buildSettings())
+        .getPositionStream(locationSettings: _buildSettings(notification))
         .listen(_controller.add, onError: _controller.addError);
 
     return LocationServiceResult.started;
@@ -132,13 +144,13 @@ class LocationService {
     _controller.close();
   }
 
-  LocationSettings _buildSettings() {
+  LocationSettings _buildSettings(ForegroundNotificationText? notification) {
     if (defaultTargetPlatform == TargetPlatform.android) {
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
-        foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationText: 'Walkable is recording your walk',
-          notificationTitle: 'Walk in progress',
+        foregroundNotificationConfig: ForegroundNotificationConfig(
+          notificationText: notification?.body ?? 'Recording your walk',
+          notificationTitle: notification?.title ?? 'Walk in progress',
           enableWakeLock: true,
         ),
       );

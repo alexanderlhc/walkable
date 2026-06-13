@@ -6,6 +6,8 @@
   "actionStop": "Stop",
   "actionPause": "Pause",
   "actionResume": "Resume",
+  "actionCancel": "Cancel",
+  "actionFinish": "Finish",
   "statDistance": "Distance",
   "statElapsed": "Elapsed",
   "statDuration": "Duration",
@@ -17,6 +19,17 @@
   "locationPermissionDenied": "Location permission denied",
   "backgroundTrackingWarning": "Notifications are off, so your walk may stop recording when the screen is locked.",
   "openSettings": "Settings",
+  "statusRecording": "Recording",
+  "statusPaused": "Paused",
+  "statusConfirmStop": "Finish walk?",
+  "locationError": "Could not get location: {error}",
+  "@locationError": {
+    "placeholders": {
+      "error": { "type": "String" }
+    }
+  },
+  "notificationTitle": "Walk in progress",
+  "notificationText": "Walkable is recording your walk",
   "unitKm": "{value} km",
   "@unitKm": {
     "placeholders": {

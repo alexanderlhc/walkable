@@ -129,6 +129,18 @@ abstract class AppLocalizations {
   /// **'Resume'**
   String get actionResume;
 
+  /// No description provided for @actionCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get actionCancel;
+
+  /// No description provided for @actionFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get actionFinish;
+
   /// No description provided for @statDistance.
   ///
   /// In en, this message translates to:
@@ -194,6 +206,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Settings'**
   String get openSettings;
+
+  /// No description provided for @statusRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording'**
+  String get statusRecording;
+
+  /// No description provided for @statusPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused'**
+  String get statusPaused;
+
+  /// No description provided for @statusConfirmStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish walk?'**
+  String get statusConfirmStop;
+
+  /// No description provided for @locationError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not get location: {error}'**
+  String locationError(String error);
+
+  /// No description provided for @notificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Walk in progress'**
+  String get notificationTitle;
+
+  /// No description provided for @notificationText.
+  ///
+  /// In en, this message translates to:
+  /// **'Walkable is recording your walk'**
+  String get notificationText;
 
   /// No description provided for @unitKm.
   ///

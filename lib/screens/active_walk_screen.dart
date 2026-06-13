@@ -108,25 +108,32 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       if (!mounted) return;
       setState(() => _recentring = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not get location: $e')),
+        SnackBar(
+            content:
+                Text(AppLocalizations.of(context)!.locationError('$e'))),
       );
     }
   }
 
   Future<void> _onStart() async {
-    final result = await widget.recorder.start();
+    final l10n = AppLocalizations.of(context)!;
+    final result = await widget.recorder.start(
+      notification: ForegroundNotificationText(
+        title: l10n.notificationTitle,
+        body: l10n.notificationText,
+      ),
+    );
     if (!mounted) return;
     if (result == LocationServiceResult.permissionDenied) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppLocalizations.of(context)!.locationPermissionDenied),
+          content: Text(l10n.locationPermissionDenied),
         ),
       );
       return;
     }
     setState(() => _recorderState = RecorderState.recording);
     if (!widget.recorder.locationService.notificationsGranted) {
-      final l10n = AppLocalizations.of(context)!;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l10n.backgroundTrackingWarning),
@@ -386,9 +393,10 @@ class _BottomPanelState extends State<_BottomPanel> {
             ),
             const SizedBox(width: 6),
             Text(
-              _confirmingStop
-                  ? 'FINISH WALK?'
-                  : (isRecording ? 'RECORDING' : 'PAUSED'),
+              (_confirmingStop
+                      ? l10n.statusConfirmStop
+                      : (isRecording ? l10n.statusRecording : l10n.statusPaused))
+                  .toUpperCase(),
               style: TextStyle(
                 color: Colors.black.withValues(alpha: 0.40),
                 fontSize: 11,
@@ -428,7 +436,7 @@ class _BottomPanelState extends State<_BottomPanel> {
         const SizedBox(height: 24),
         // Controls — normal transport row, or the Cancel / Finish confirmation.
         _confirmingStop
-            ? _buildConfirmStop()
+            ? _buildConfirmStop(l10n)
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -462,14 +470,14 @@ class _BottomPanelState extends State<_BottomPanel> {
     );
   }
 
-  Widget _buildConfirmStop() {
+  Widget _buildConfirmStop(AppLocalizations l10n) {
     return Row(
       children: [
         Expanded(
           child: _PillButton(
             key: const Key('cancel_stop_button'),
             onTap: () => setState(() => _confirmingStop = false),
-            label: 'CANCEL',
+            label: l10n.actionCancel.toUpperCase(),
             outlined: true,
           ),
         ),
@@ -478,7 +486,7 @@ class _BottomPanelState extends State<_BottomPanel> {
           child: _PillButton(
             key: const Key('confirm_stop_button'),
             onTap: widget.onStop,
-            label: 'FINISH',
+            label: l10n.actionFinish.toUpperCase(),
             color: const Color(0xFFFF3B30),
           ),
         ),

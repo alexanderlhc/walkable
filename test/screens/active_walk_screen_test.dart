@@ -30,7 +30,7 @@ void main() {
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => snapshotsCtrl.stream);
     when(() => recorder.locationService).thenReturn(locationService);
-    when(() => recorder.start())
+    when(() => recorder.start(notification: any(named: 'notification')))
         .thenAnswer((_) async => LocationServiceResult.started);
     when(() => recorder.pause()).thenAnswer((_) async {});
     when(() => recorder.resume()).thenAnswer((_) async {});
@@ -134,7 +134,8 @@ void main() {
     await tester.tap(find.byKey(const Key('start_button')));
     await tester.pumpAndSettle();
 
-    verify(() => recorder.start()).called(1);
+    verify(() => recorder.start(notification: any(named: 'notification')))
+        .called(1);
     expect(find.byKey(const Key('stop_button')), findsOneWidget);
     expect(find.byKey(const Key('pause_button')), findsOneWidget);
     expect(find.byKey(const Key('start_button')), findsNothing);

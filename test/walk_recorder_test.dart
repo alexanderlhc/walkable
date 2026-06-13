@@ -11,7 +11,10 @@ class _StubLocationService extends LocationService {
       StreamController<Position>.broadcast();
 
   @override
-  Future<LocationServiceResult> start() async => LocationServiceResult.started;
+  Future<LocationServiceResult> start({
+    ForegroundNotificationText? notification,
+  }) async =>
+      LocationServiceResult.started;
 
   @override
   Future<void> stop() async {}

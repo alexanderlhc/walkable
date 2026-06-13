@@ -27,6 +27,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionResume => 'Resume';
 
   @override
+  String get actionCancel => 'Cancel';
+
+  @override
+  String get actionFinish => 'Finish';
+
+  @override
   String get statDistance => 'Distance';
 
   @override
@@ -58,6 +64,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openSettings => 'Settings';
+
+  @override
+  String get statusRecording => 'Recording';
+
+  @override
+  String get statusPaused => 'Paused';
+
+  @override
+  String get statusConfirmStop => 'Finish walk?';
+
+  @override
+  String locationError(String error) {
+    return 'Could not get location: $error';
+  }
+
+  @override
+  String get notificationTitle => 'Walk in progress';
+
+  @override
+  String get notificationText => 'Walkable is recording your walk';
 
   @override
   String unitKm(String value) {
