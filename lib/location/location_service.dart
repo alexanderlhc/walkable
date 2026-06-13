@@ -16,17 +16,22 @@ abstract interface class GeolocatorInterface {
 /// Ensures the Android notification permission needed to show the
 /// location foreground-service notification (required on Android 13+).
 abstract interface class NotificationPermission {
-  Future<void> ensureGranted();
+  /// Requests the permission if needed. Returns whether notifications are
+  /// permitted afterwards — `false` means the foreground-service notification
+  /// can't show, so background tracking will be unreliable.
+  Future<bool> ensureGranted();
 }
 
 class _DefaultNotificationPermission implements NotificationPermission {
   @override
-  Future<void> ensureGranted() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return;
-    final status = await Permission.notification.status;
+  Future<bool> ensureGranted() async {
+    // Only Android gates the foreground-service notification this way.
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    var status = await Permission.notification.status;
     if (status.isDenied) {
-      await Permission.notification.request();
+      status = await Permission.notification.request();
     }
+    return status.isGranted;
   }
 }
 
@@ -66,9 +71,18 @@ class LocationService {
       StreamController<Position>.broadcast();
   StreamSubscription<Position>? _subscription;
   bool _running = false;
+  bool _notificationsGranted = true;
 
   Stream<Position> get positions => _controller.stream;
   bool get isRunning => _running;
+
+  /// Whether the foreground-service notification can be shown after the most
+  /// recent [start]. When `false`, background tracking is unreliable and the
+  /// user should be warned.
+  bool get notificationsGranted => _notificationsGranted;
+
+  /// Opens the OS app settings so the user can re-enable a denied permission.
+  Future<void> openSettings() => openAppSettings();
 
   Future<bool> checkAndRequestPermission() async {
     var permission = await _geolocator.checkPermission();
@@ -81,7 +95,6 @@ class LocationService {
 
   Future<Position> getCurrentPosition() =>
       _geolocator.getCurrentPosition();
-
 
   Stream<Position> watchPosition() => _geolocator.getPositionStream(
         locationSettings:
@@ -98,7 +111,7 @@ class LocationService {
     // this runtime permission, and without a visible notification the OS will
     // throttle/kill GPS once the screen locks. Best-effort: failure to grant
     // doesn't block recording, it just makes background tracking less reliable.
-    await _notificationPermission.ensureGranted();
+    _notificationsGranted = await _notificationPermission.ensureGranted();
 
     _running = true;
     _subscription = _geolocator

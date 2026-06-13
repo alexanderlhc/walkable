@@ -6,10 +6,16 @@ import 'package:walkable/location/location_service.dart';
 class MockGeolocatorInterface extends Mock implements GeolocatorInterface {}
 
 class FakeNotificationPermission implements NotificationPermission {
+  FakeNotificationPermission({this.granted = true});
+
+  bool granted;
   int ensureGrantedCalls = 0;
 
   @override
-  Future<void> ensureGranted() async => ensureGrantedCalls++;
+  Future<bool> ensureGranted() async {
+    ensureGrantedCalls++;
+    return granted;
+  }
 }
 
 Position _pos({double lat = 55.676, double lng = 12.568}) => Position(
@@ -104,6 +110,21 @@ void main() {
       await service.start();
 
       expect(notifications.ensureGrantedCalls, 1);
+    });
+
+    test('notificationsGranted reflects whether the permission was granted',
+        () async {
+      notifications.granted = false;
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.always);
+      when(
+        () => mock.getPositionStream(
+            locationSettings: any(named: 'locationSettings')),
+      ).thenAnswer((_) => const Stream.empty());
+
+      await service.start();
+
+      expect(service.notificationsGranted, isFalse);
     });
 
     test('returns running if already started', () async {

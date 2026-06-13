@@ -54,6 +54,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get locationPermissionDenied => 'Location permission denied';
 
   @override
+  String get backgroundTrackingWarning => 'Notifications are off, so your walk may stop recording when the screen is locked.';
+
+  @override
+  String get openSettings => 'Settings';
+
+  @override
   String unitKm(String value) {
     return '$value km';
   }

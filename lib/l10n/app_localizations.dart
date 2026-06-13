@@ -183,6 +183,18 @@ abstract class AppLocalizations {
   /// **'Location permission denied'**
   String get locationPermissionDenied;
 
+  /// No description provided for @backgroundTrackingWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are off, so your walk may stop recording when the screen is locked.'**
+  String get backgroundTrackingWarning;
+
+  /// No description provided for @openSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get openSettings;
+
   /// No description provided for @unitKm.
   ///
   /// In en, this message translates to:

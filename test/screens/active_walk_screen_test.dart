@@ -41,6 +41,7 @@ void main() {
         .thenAnswer((_) async => true);
     when(() => locationService.watchPosition())
         .thenAnswer((_) => const Stream.empty());
+    when(() => locationService.notificationsGranted).thenReturn(true);
   });
 
   tearDown(() => snapshotsCtrl.close());
@@ -138,6 +139,30 @@ void main() {
     expect(find.byKey(const Key('pause_button')), findsOneWidget);
     expect(find.byKey(const Key('start_button')), findsNothing);
     expect(find.byKey(const Key('resume_button')), findsNothing);
+  });
+
+  testWidgets('warns with a recovery action when notifications are off',
+      (tester) async {
+    when(() => locationService.notificationsGranted).thenReturn(false);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.byType(SnackBarAction), findsOneWidget);
+  });
+
+  testWidgets('no warning when notifications are granted', (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   testWidgets('RECORDING label visible when recording', (tester) async {
