@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 export 'package:geolocator/geolocator.dart' show Position;
 
@@ -10,6 +11,23 @@ abstract interface class GeolocatorInterface {
   Future<LocationPermission> requestPermission();
   Future<Position> getCurrentPosition({LocationSettings? locationSettings});
   Stream<Position> getPositionStream({LocationSettings? locationSettings});
+}
+
+/// Ensures the Android notification permission needed to show the
+/// location foreground-service notification (required on Android 13+).
+abstract interface class NotificationPermission {
+  Future<void> ensureGranted();
+}
+
+class _DefaultNotificationPermission implements NotificationPermission {
+  @override
+  Future<void> ensureGranted() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    final status = await Permission.notification.status;
+    if (status.isDenied) {
+      await Permission.notification.request();
+    }
+  }
 }
 
 class _DefaultGeolocator implements GeolocatorInterface {
@@ -35,10 +53,15 @@ class _DefaultGeolocator implements GeolocatorInterface {
 enum LocationServiceResult { started, running, permissionDenied }
 
 class LocationService {
-  LocationService({GeolocatorInterface? geolocator})
-      : _geolocator = geolocator ?? _DefaultGeolocator();
+  LocationService({
+    GeolocatorInterface? geolocator,
+    NotificationPermission? notificationPermission,
+  })  : _geolocator = geolocator ?? _DefaultGeolocator(),
+        _notificationPermission =
+            notificationPermission ?? _DefaultNotificationPermission();
 
   final GeolocatorInterface _geolocator;
+  final NotificationPermission _notificationPermission;
   final StreamController<Position> _controller =
       StreamController<Position>.broadcast();
   StreamSubscription<Position>? _subscription;
@@ -59,6 +82,7 @@ class LocationService {
   Future<Position> getCurrentPosition() =>
       _geolocator.getCurrentPosition();
 
+
   Stream<Position> watchPosition() => _geolocator.getPositionStream(
         locationSettings:
             const LocationSettings(accuracy: LocationAccuracy.high),
@@ -69,6 +93,12 @@ class LocationService {
 
     final granted = await checkAndRequestPermission();
     if (!granted) return LocationServiceResult.permissionDenied;
+
+    // The foreground-service notification can't appear on Android 13+ without
+    // this runtime permission, and without a visible notification the OS will
+    // throttle/kill GPS once the screen locks. Best-effort: failure to grant
+    // doesn't block recording, it just makes background tracking less reliable.
+    await _notificationPermission.ensureGranted();
 
     _running = true;
     _subscription = _geolocator
