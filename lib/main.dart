@@ -44,6 +44,16 @@ class WalkableApp extends StatelessWidget {
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
+      // Match the device language; fall back to English for anything we don't
+      // translate (rather than the first supported locale, which is Danish).
+      localeResolutionCallback: (deviceLocale, supportedLocales) {
+        for (final locale in supportedLocales) {
+          if (locale.languageCode == deviceLocale?.languageCode) {
+            return locale;
+          }
+        }
+        return const Locale('en');
+      },
       onGenerateRoute: (settings) {
         if (settings.name == '/walk-detail') {
           final walk = settings.arguments as Walk;
