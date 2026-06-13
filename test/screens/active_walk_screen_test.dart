@@ -46,11 +46,22 @@ void main() {
 
   tearDown(() => snapshotsCtrl.close());
 
-  Widget buildSubject() => MaterialApp(
+  Widget buildSubject({Locale? locale}) => MaterialApp(
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: ActiveWalkScreen(recorder: recorder, repository: repository),
       );
+
+  // ─── localization ────────────────────────────────────────────────────────────
+
+  testWidgets('renders Danish strings when the locale is Danish',
+      (tester) async {
+    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tidligere gåture'), findsOneWidget);
+  });
 
   // ─── idle state ────────────────────────────────────────────────────────────
 
