@@ -283,8 +283,12 @@ void main() {
     await tester.tap(find.byKey(const Key('start_button')));
     await tester.pumpAndSettle();
 
-    when(() => recorder.state).thenReturn(RecorderState.idle);
+    // Stop is a two-step confirmation: tap Stop, then Finish.
     await tester.tap(find.byKey(const Key('stop_button')));
+    await tester.pumpAndSettle();
+
+    when(() => recorder.state).thenReturn(RecorderState.idle);
+    await tester.tap(find.byKey(const Key('confirm_stop_button')));
     await tester.pumpAndSettle();
 
     verify(() => recorder.stop()).called(1);

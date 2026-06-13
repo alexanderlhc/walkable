@@ -261,7 +261,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
 // Single frosted-glass surface that owns both stats and controls.
 // Nothing outside this widget touches the bottom of the screen.
 
-class _BottomPanel extends StatelessWidget {
+class _BottomPanel extends StatefulWidget {
   final RecorderState state;
   final WalkSnapshot? snapshot;
   final VoidCallback onStart;
@@ -277,6 +277,23 @@ class _BottomPanel extends StatelessWidget {
     required this.onResume,
     required this.onStop,
   });
+
+  @override
+  State<_BottomPanel> createState() => _BottomPanelState();
+}
+
+class _BottomPanelState extends State<_BottomPanel> {
+  // While true, the controls row is replaced by a Cancel / Finish confirmation.
+  bool _confirmingStop = false;
+
+  @override
+  void didUpdateWidget(_BottomPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Leaving the active state (walk finished) clears any pending confirmation.
+    if (widget.state == RecorderState.idle && _confirmingStop) {
+      _confirmingStop = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -304,7 +321,7 @@ class _BottomPanel extends StatelessWidget {
               ),
             ),
             padding: EdgeInsets.fromLTRB(24, 20, 24, 20 + bottomInset),
-            child: state == RecorderState.idle
+            child: widget.state == RecorderState.idle
                 ? _buildIdle(l10n)
                 : _buildActive(l10n),
           ),
@@ -316,7 +333,7 @@ class _BottomPanel extends StatelessWidget {
   Widget _buildIdle(AppLocalizations l10n) {
     return GestureDetector(
       key: const Key('start_button'),
-      onTap: onStart,
+      onTap: widget.onStart,
       child: Container(
         height: 58,
         decoration: BoxDecoration(
@@ -345,10 +362,10 @@ class _BottomPanel extends StatelessWidget {
   }
 
   Widget _buildActive(AppLocalizations l10n) {
-    final isRecording = state == RecorderState.recording;
-    final dist = snapshot?.distanceMetres ?? 0.0;
-    final elapsed = snapshot?.elapsed ?? Duration.zero;
-    final pace = snapshot?.paceMinPerKm ?? double.infinity;
+    final isRecording = widget.state == RecorderState.recording;
+    final dist = widget.snapshot?.distanceMetres ?? 0.0;
+    final elapsed = widget.snapshot?.elapsed ?? Duration.zero;
+    final pace = widget.snapshot?.paceMinPerKm ?? double.infinity;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -369,7 +386,9 @@ class _BottomPanel extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              isRecording ? 'RECORDING' : 'PAUSED',
+              _confirmingStop
+                  ? 'FINISH WALK?'
+                  : (isRecording ? 'RECORDING' : 'PAUSED'),
               style: TextStyle(
                 color: Colors.black.withValues(alpha: 0.40),
                 fontSize: 11,
@@ -407,32 +426,61 @@ class _BottomPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 24),
-        // Controls
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _PanelButton(
-              key: isRecording
-                  ? const Key('pause_button')
-                  : const Key('resume_button'),
-              onTap: isRecording ? onPause : onResume,
-              size: 52,
-              outlined: true,
-              child: Icon(
-                isRecording ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                color: Colors.black,
-                size: 22,
+        // Controls — normal transport row, or the Cancel / Finish confirmation.
+        _confirmingStop
+            ? _buildConfirmStop()
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _PanelButton(
+                    key: isRecording
+                        ? const Key('pause_button')
+                        : const Key('resume_button'),
+                    onTap: isRecording ? widget.onPause : widget.onResume,
+                    size: 52,
+                    outlined: true,
+                    child: Icon(
+                      isRecording
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Colors.black,
+                      size: 22,
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  _PanelButton(
+                    key: const Key('stop_button'),
+                    onTap: () => setState(() => _confirmingStop = true),
+                    size: 64,
+                    color: const Color(0xFFFF3B30),
+                    child: const Icon(Icons.stop_rounded,
+                        color: Colors.white, size: 28),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(width: 20),
-            _PanelButton(
-              key: const Key('stop_button'),
-              onTap: onStop,
-              size: 64,
-              color: const Color(0xFFFF3B30),
-              child: const Icon(Icons.stop_rounded, color: Colors.white, size: 28),
-            ),
-          ],
+      ],
+    );
+  }
+
+  Widget _buildConfirmStop() {
+    return Row(
+      children: [
+        Expanded(
+          child: _PillButton(
+            key: const Key('cancel_stop_button'),
+            onTap: () => setState(() => _confirmingStop = false),
+            label: 'CANCEL',
+            outlined: true,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: _PillButton(
+            key: const Key('confirm_stop_button'),
+            onTap: widget.onStop,
+            label: 'FINISH',
+            color: const Color(0xFFFF3B30),
+          ),
         ),
       ],
     );
@@ -541,6 +589,52 @@ class _PanelButton extends StatelessWidget {
         ),
         alignment: Alignment.center,
         child: child,
+      ),
+    );
+  }
+}
+
+// Full-width pill used by the Cancel / Finish confirmation row.
+class _PillButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final String label;
+  final bool outlined;
+  final Color? color;
+
+  const _PillButton({
+    super.key,
+    required this.onTap,
+    required this.label,
+    this.outlined = false,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 52,
+        decoration: BoxDecoration(
+          color: color ?? Colors.transparent,
+          borderRadius: BorderRadius.circular(26),
+          border: outlined
+              ? Border.all(
+                  color: Colors.black.withValues(alpha: 0.18),
+                  width: 1.5,
+                )
+              : null,
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: outlined ? Colors.black : Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
       ),
     );
   }
