@@ -60,9 +60,9 @@ void main() {
     await tester.pumpWidget(buildSubject());
     await tester.pump();
 
-    expect(find.text('2026-06-01'), findsOneWidget);
-    expect(find.text('2026-05-15'), findsOneWidget);
-    expect(find.byType(ListTile), findsNWidgets(2));
+    expect(find.text('Mon, Jun 1'), findsOneWidget);
+    expect(find.text('Fri, May 15'), findsOneWidget);
+    expect(find.byType(Card), findsNWidgets(2));
   });
 
   testWidgets('tapping a row navigates to walk detail', (tester) async {
@@ -77,7 +77,7 @@ void main() {
     await tester.pumpWidget(buildSubject());
     await tester.pump();
 
-    await tester.tap(find.byType(ListTile).first);
+    await tester.tap(find.byType(InkWell).first);
     await tester.pumpAndSettle();
 
     expect(find.text('Walk Detail'), findsOneWidget);
