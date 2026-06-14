@@ -8,6 +8,7 @@ import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
+import 'package:walkable/theme.dart';
 import 'package:walkable/walk_recorder.dart';
 
 class ActiveWalkScreen extends StatefulWidget {
@@ -188,9 +189,8 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
+                urlTemplate: mapTileUrl(Theme.of(context).brightness),
+                subdomains: mapTileSubdomains,
                 userAgentPackageName: 'dk.alexanderlhc.walkable',
               ),
               if (points.length >= 2)

@@ -14,3 +14,12 @@ ThemeData buildAppTheme(Brightness brightness) {
     useMaterial3: true,
   );
 }
+
+/// CartoDB raster tiles, label-free so the brand-coloured route stays the
+/// focus. Light uses the muted "voyager" style; dark uses "dark matter" so the
+/// map matches a dark device theme.
+String mapTileUrl(Brightness brightness) => brightness == Brightness.dark
+    ? 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}.png'
+    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png';
+
+const List<String> mapTileSubdomains = ['a', 'b', 'c', 'd'];

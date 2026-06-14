@@ -80,7 +80,7 @@ void main() {
     await binding.takeScreenshot('04-history');
 
     // 3) Walk detail — tap the most recent walk (route + stats).
-    await tester.tap(find.byType(ListTile).first);
+    await tester.tap(find.byType(Card).first);
     await tester.pump(const Duration(milliseconds: 400));
     await _settleMap(tester);
     await binding.takeScreenshot('03-detail');

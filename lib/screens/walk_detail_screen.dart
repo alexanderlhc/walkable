@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/theme.dart';
 import 'package:walkable/walk_calculator.dart';
 
 class WalkDetailScreen extends StatelessWidget {
@@ -43,8 +44,8 @@ class WalkDetailScreen extends StatelessWidget {
                     ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  urlTemplate: mapTileUrl(Theme.of(context).brightness),
+                  subdomains: mapTileSubdomains,
                   userAgentPackageName: 'dk.alexanderlhc.walkable',
                 ),
                 if (coords.isNotEmpty)
