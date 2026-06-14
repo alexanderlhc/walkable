@@ -35,6 +35,30 @@ class _DefaultNotificationPermission implements NotificationPermission {
   }
 }
 
+/// Ensures the "Allow all the time" background-location permission. Without it
+/// Android only delivers location updates while the app is in use, so a walk
+/// stops being tracked once the screen locks or you switch apps.
+abstract interface class BackgroundLocationPermission {
+  /// Requests the permission if needed. Returns whether it is granted
+  /// afterwards. Best-effort: a `false` result means screen-off tracking will
+  /// be unreliable, but recording can still proceed.
+  Future<bool> ensureGranted();
+}
+
+class _DefaultBackgroundLocationPermission
+    implements BackgroundLocationPermission {
+  @override
+  Future<bool> ensureGranted() async {
+    // Only Android distinguishes background ("all the time") location.
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    var status = await Permission.locationAlways.status;
+    if (!status.isGranted) {
+      status = await Permission.locationAlways.request();
+    }
+    return status.isGranted;
+  }
+}
+
 class _DefaultGeolocator implements GeolocatorInterface {
   @override
   Future<LocationPermission> checkPermission() =>
@@ -69,17 +93,22 @@ class LocationService {
   LocationService({
     GeolocatorInterface? geolocator,
     NotificationPermission? notificationPermission,
+    BackgroundLocationPermission? backgroundLocationPermission,
   })  : _geolocator = geolocator ?? _DefaultGeolocator(),
         _notificationPermission =
-            notificationPermission ?? _DefaultNotificationPermission();
+            notificationPermission ?? _DefaultNotificationPermission(),
+        _backgroundLocationPermission = backgroundLocationPermission ??
+            _DefaultBackgroundLocationPermission();
 
   final GeolocatorInterface _geolocator;
   final NotificationPermission _notificationPermission;
+  final BackgroundLocationPermission _backgroundLocationPermission;
   final StreamController<Position> _controller =
       StreamController<Position>.broadcast();
   StreamSubscription<Position>? _subscription;
   bool _running = false;
   bool _notificationsGranted = true;
+  bool _backgroundGranted = true;
 
   Stream<Position> get positions => _controller.stream;
   bool get isRunning => _running;
@@ -89,6 +118,11 @@ class LocationService {
   /// user should be warned.
   bool get notificationsGranted => _notificationsGranted;
 
+  /// Whether "Allow all the time" background location was granted after the
+  /// most recent permission check. When `false`, tracking may stop once the
+  /// screen locks.
+  bool get backgroundGranted => _backgroundGranted;
+
   /// Opens the OS app settings so the user can re-enable a denied permission.
   Future<void> openSettings() => openAppSettings();
 
@@ -97,8 +131,17 @@ class LocationService {
     if (permission == LocationPermission.denied) {
       permission = await _geolocator.requestPermission();
     }
-    return permission != LocationPermission.denied &&
+    final foregroundGranted = permission != LocationPermission.denied &&
         permission != LocationPermission.deniedForever;
+    if (!foregroundGranted) {
+      _backgroundGranted = false;
+      return false;
+    }
+    // Escalate to "Allow all the time" so updates keep coming with the screen
+    // off. Best-effort: declining doesn't block recording, just makes
+    // background tracking unreliable (and the user can be warned).
+    _backgroundGranted = await _backgroundLocationPermission.ensureGranted();
+    return true;
   }
 
   Future<Position> getCurrentPosition() =>
@@ -152,6 +195,9 @@ class LocationService {
           notificationText: notification?.body ?? 'Recording your walk',
           notificationTitle: notification?.title ?? 'Walk in progress',
           enableWakeLock: true,
+          // Persistent, non-dismissable notification: keeps the foreground
+          // service (and therefore GPS) alive while the screen is locked.
+          setOngoing: true,
         ),
       );
     }

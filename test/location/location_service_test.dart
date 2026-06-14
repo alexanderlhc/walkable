@@ -18,6 +18,20 @@ class FakeNotificationPermission implements NotificationPermission {
   }
 }
 
+class FakeBackgroundLocationPermission
+    implements BackgroundLocationPermission {
+  FakeBackgroundLocationPermission({this.granted = true});
+
+  bool granted;
+  int ensureGrantedCalls = 0;
+
+  @override
+  Future<bool> ensureGranted() async {
+    ensureGrantedCalls++;
+    return granted;
+  }
+}
+
 Position _pos({double lat = 55.676, double lng = 12.568}) => Position(
       latitude: lat,
       longitude: lng,
@@ -34,14 +48,17 @@ Position _pos({double lat = 55.676, double lng = 12.568}) => Position(
 void main() {
   late MockGeolocatorInterface mock;
   late FakeNotificationPermission notifications;
+  late FakeBackgroundLocationPermission background;
   late LocationService service;
 
   setUp(() {
     mock = MockGeolocatorInterface();
     notifications = FakeNotificationPermission();
+    background = FakeBackgroundLocationPermission();
     service = LocationService(
       geolocator: mock,
       notificationPermission: notifications,
+      backgroundLocationPermission: background,
     );
   });
 
@@ -217,6 +234,39 @@ void main() {
 
       expect(await service.checkAndRequestPermission(), isFalse);
       verifyNever(() => mock.requestPermission());
+    });
+
+    test('escalates to background location once foreground is granted',
+        () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      await service.checkAndRequestPermission();
+
+      expect(background.ensureGrantedCalls, 1);
+      expect(service.backgroundGranted, isTrue);
+    });
+
+    test('backgroundGranted is false when "all the time" is declined',
+        () async {
+      background.granted = false;
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      await service.checkAndRequestPermission();
+
+      expect(service.backgroundGranted, isFalse);
+    });
+
+    test('does not request background location when foreground is denied',
+        () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.deniedForever);
+
+      await service.checkAndRequestPermission();
+
+      expect(background.ensureGrantedCalls, 0);
+      expect(service.backgroundGranted, isFalse);
     });
   });
 
