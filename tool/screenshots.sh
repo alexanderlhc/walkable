@@ -26,10 +26,13 @@ SYS_IMAGE="system-images;android-34;google_apis;x86_64"
 PORT=5560
 SERIAL="emulator-$PORT"
 
-# device-key | AVD name | device profile (avdmanager -d) | output subdir
+# device-key | AVD name | device profile (avdmanager -d) | output subdir | lcd override (WxHxdensity, optional)
+# The lcd override pins a portrait geometry — needed for landscape-native panels
+# like the Nexus 10 so its screenshots come out portrait like the others.
 DEVICES=(
-  "phone|Walkable_Phone|pixel_2|phone"
-  "tablet|Walkable_Tablet7|Nexus 7 2013|tablet_7inch"
+  "phone|Walkable_Phone|pixel_2|phone|"
+  "tablet|Walkable_Tablet7|Nexus 7 2013|tablet_7inch|"
+  "tablet10|Walkable_Tablet10|Nexus 10|tablet_10inch|1600x2560x320"
 )
 
 FLUTTER="fvm flutter"
@@ -37,13 +40,35 @@ FLUTTER="fvm flutter"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { printf '\033[1;32m▸ %s\033[0m\n' "$*"; }
 
+set_prop() { # file key value
+  local f="$1" k="$2" v="$3"
+  if grep -q "^$k=" "$f"; then
+    sed -i "s|^$k=.*|$k=$v|" "$f"
+  else
+    echo "$k=$v" >>"$f"
+  fi
+}
+
 ensure_avd() {
-  local name="$1" profile="$2"
+  local name="$1" profile="$2" lcd="$3"
   if "$EMULATOR" -list-avds | grep -qx "$name"; then
     log "AVD '$name' exists"
   else
     log "Creating AVD '$name' ($profile)"
     echo "no" | "$AVDMANAGER" create avd -n "$name" -k "$SYS_IMAGE" -d "$profile"
+  fi
+  local cfg="${ANDROID_AVD_HOME:-$HOME/.android/avd}/$name.avd/config.ini"
+  [ -f "$cfg" ] || return 0
+  set_prop "$cfg" "hw.initialOrientation" "portrait"
+  # Pin a portrait LCD geometry when requested (drops the device skin so the
+  # override takes effect).
+  if [ -n "$lcd" ]; then
+    IFS='x' read -r w h d <<<"$lcd"
+    set_prop "$cfg" "hw.lcd.width" "$w"
+    set_prop "$cfg" "hw.lcd.height" "$h"
+    set_prop "$cfg" "hw.lcd.density" "$d"
+    set_prop "$cfg" "skin.name" "${w}x${h}"
+    set_prop "$cfg" "skin.path" "_no_skin"
   fi
 }
 
@@ -66,10 +91,11 @@ boot() {
       exit 1
     fi
   done
-  # Kill animations for crisp, deterministic frames.
+  # Kill animations for crisp, deterministic frames; lock orientation portrait.
   "$ADB" -s "$SERIAL" shell settings put global window_animation_scale 0
   "$ADB" -s "$SERIAL" shell settings put global transition_animation_scale 0
   "$ADB" -s "$SERIAL" shell settings put global animator_duration_scale 0
+  "$ADB" -s "$SERIAL" shell settings put system accelerometer_rotation 0
   sleep 2
 }
 
@@ -101,11 +127,11 @@ capture() {
 FILTER="${1:-}"
 
 for entry in "${DEVICES[@]}"; do
-  IFS='|' read -r key name profile subdir <<<"$entry"
+  IFS='|' read -r key name profile subdir lcd <<<"$entry"
   [ -n "$FILTER" ] && [ "$FILTER" != "$key" ] && continue
 
   log "=== $key ==="
-  ensure_avd "$name" "$profile"
+  ensure_avd "$name" "$profile" "$lcd"
   boot "$name"
   capture "$ROOT/docs/screenshots/$subdir"
   shutdown
