@@ -19,6 +19,10 @@ Output:
 The 10" panel is landscape-native, so the harness pins it to a portrait LCD
 geometry (1600×2560) to keep every device portrait.
 
+Each device is captured **twice** — once in light mode and once in dark mode.
+The dark set lives alongside each light folder with a `_dark` suffix
+(`phone_dark/`, `tablet_7inch_dark/`, `tablet_10inch_dark/`).
+
 Each folder has: `01-home`, `02-recording`, `03-detail`, `04-history`.
 
 ## How it works
@@ -34,8 +38,9 @@ Each folder has: `01-home`, `02-recording`, `03-detail`, `04-history`.
 
 ## Determinism notes
 
-- The only non-fixed input is the **map tiles**, fetched from OpenStreetMap /
-  CartoDB. They're stable, but require network access during capture.
+- The only non-fixed input is the **map tiles**, fetched from CartoDB (voyager
+  in light mode, dark-matter in dark mode). They're stable, but require network
+  access during capture.
 - The **recording** screen shows a genuine just-started walk (`00:03`, 0.00 km).
   `WalkRecorder` reads `DateTime.now()` for elapsed time and we deliberately do
   not modify production code to fake it, so a rich in-progress shot isn't

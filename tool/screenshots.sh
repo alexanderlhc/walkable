@@ -11,7 +11,8 @@
 #   tool/screenshots.sh              # all devices
 #   tool/screenshots.sh phone        # one device by key
 #
-# Output: docs/screenshots/<device>/{01-home,02-recording,03-detail,04-history}.png
+# Output: docs/screenshots/<device>[_dark]/{01-home,02-recording,03-detail,04-history}.png
+# Each device is captured twice: once in light mode, once in dark (night) mode.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -109,6 +110,12 @@ shutdown() {
 }
 trap shutdown EXIT
 
+set_ui_mode() { # yes|no — flip the system into night (dark) mode or out of it.
+  log "UI night mode: $1"
+  "$ADB" -s "$SERIAL" shell cmd uimode night "$1" >/dev/null 2>&1 || true
+  sleep 1
+}
+
 capture() {
   local out="$1"
   rm -rf "$out" && mkdir -p "$out"
@@ -133,8 +140,11 @@ for entry in "${DEVICES[@]}"; do
   log "=== $key ==="
   ensure_avd "$name" "$profile" "$lcd"
   boot "$name"
+  set_ui_mode no
   capture "$ROOT/docs/screenshots/$subdir"
+  set_ui_mode yes
+  capture "$ROOT/docs/screenshots/${subdir}_dark"
   shutdown
 done
 
-log "Done. Screenshots in docs/screenshots/"
+log "Done. Screenshots in docs/screenshots/ (light + *_dark)"
