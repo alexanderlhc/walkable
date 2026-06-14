@@ -45,6 +45,44 @@ class WalkRepository {
     ''');
   }
 
+  /// Inserts the walk row at the start of recording, before any coordinates,
+  /// so an in-progress walk survives the process being killed. The walk has no
+  /// end time until [finishWalk].
+  Future<void> createWalk(String id, DateTime startTime) async {
+    await _db.insert(
+      'walks',
+      {
+        'id': id,
+        'start_time': startTime.millisecondsSinceEpoch,
+        'end_time': null,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  /// Appends a single recorded point, persisted immediately so a background
+  /// kill loses at most the latest fix rather than the whole route.
+  Future<void> appendCoordinate(
+      String walkId, Coordinate coord, int sequenceIndex) async {
+    await _db.insert('coordinates', {
+      'walk_id': walkId,
+      'lat': coord.lat,
+      'lng': coord.lng,
+      'recorded_at': coord.recordedAt.millisecondsSinceEpoch,
+      'sequence_index': sequenceIndex,
+    });
+  }
+
+  /// Marks a walk finished by recording its end time.
+  Future<void> finishWalk(String walkId, DateTime endTime) async {
+    await _db.update(
+      'walks',
+      {'end_time': endTime.millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [walkId],
+    );
+  }
+
   Future<void> save(Walk walk) async {
     await _db.transaction((txn) async {
       await txn.insert(

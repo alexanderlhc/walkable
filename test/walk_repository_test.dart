@@ -96,4 +96,28 @@ void main() {
 
     expect(found!.coordinates.map((c) => c.lat), [1.0, 2.0, 3.0]);
   });
+
+  group('incremental recording', () {
+    test('createWalk + appendCoordinate persist an in-progress walk', () async {
+      await repository.createWalk('live', DateTime(2026, 6, 1, 9, 0));
+      await repository.appendCoordinate('live',
+          Coordinate(lat: 1.0, lng: 1.0, recordedAt: DateTime(2026, 6, 1, 9, 0)), 0);
+      await repository.appendCoordinate('live',
+          Coordinate(lat: 2.0, lng: 2.0, recordedAt: DateTime(2026, 6, 1, 9, 1)), 1);
+
+      // Recoverable even though finishWalk was never called (e.g. the process
+      // was killed mid-walk): coordinates intact, end time still open.
+      final found = await repository.findById('live');
+      expect(found!.coordinates.map((c) => c.lat), [1.0, 2.0]);
+      expect(found.endTime, isNull);
+    });
+
+    test('finishWalk records the end time', () async {
+      await repository.createWalk('done', DateTime(2026, 6, 1, 9, 0));
+      await repository.finishWalk('done', DateTime(2026, 6, 1, 9, 30));
+
+      final found = await repository.findById('done');
+      expect(found!.endTime, DateTime(2026, 6, 1, 9, 30));
+    });
+  });
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -29,12 +30,16 @@ class WalkRecorder {
   RecorderState _state = RecorderState.idle;
   RecorderState get state => _state;
 
+  String? _id;
   DateTime? _startTime;
   DateTime? _periodStart;
   Duration _accumulatedDuration = Duration.zero;
   final List<Coordinate> _coordinates = [];
   StreamSubscription<Position>? _subscription;
   ForegroundNotificationText? _notification;
+  // Serializes incremental DB writes and lets stop() drain them before
+  // finalizing the walk.
+  Future<void> _persist = Future<void>.value();
 
   final StreamController<WalkSnapshot> _snapshots =
       StreamController<WalkSnapshot>.broadcast();
@@ -57,6 +62,9 @@ class WalkRecorder {
     _state = RecorderState.recording;
     _startTime = DateTime.now();
     _periodStart = _startTime;
+    _id = _generateId(_startTime!);
+    // Persist the walk row up front so an in-progress walk survives a kill.
+    _persist = _repository.createWalk(_id!, _startTime!);
     _subscription = locationService.positions.listen(_onPosition);
     return LocationServiceResult.started;
   }
@@ -93,22 +101,20 @@ class WalkRecorder {
     final endTime = DateTime.now();
     _snapshots.add(_buildSnapshot(endTime));
 
-    final walk = Walk(
-      id: _generateId(_startTime!),
-      startTime: _startTime!,
-      endTime: endTime,
-      coordinates: List.of(_coordinates),
-    );
-    await _repository.save(walk);
+    // Drain pending coordinate writes, then mark the walk finished.
+    await _persist;
+    await _repository.finishWalk(_id!, endTime);
   }
 
   void reset() {
     if (_state != RecorderState.stopped) return;
     _state = RecorderState.idle;
+    _id = null;
     _startTime = null;
     _periodStart = null;
     _accumulatedDuration = Duration.zero;
     _coordinates.clear();
+    _persist = Future<void>.value();
   }
 
   void dispose() {
@@ -117,12 +123,28 @@ class WalkRecorder {
   }
 
   void _onPosition(Position pos) {
-    _coordinates.add(Coordinate(
+    final coord = Coordinate(
       lat: pos.latitude,
       lng: pos.longitude,
       recordedAt: pos.timestamp,
-    ));
+    );
+    final index = _coordinates.length;
+    _coordinates.add(coord);
     _snapshots.add(_buildSnapshot(DateTime.now()));
+
+    // Persist this point immediately, serialized after earlier writes.
+    // Best-effort: a write failure mustn't kill recording, and the point is
+    // still in memory for the live snapshot.
+    final id = _id;
+    if (id != null) {
+      _persist = _persist.then((_) async {
+        try {
+          await _repository.appendCoordinate(id, coord, index);
+        } catch (e) {
+          debugPrint('WalkRecorder: failed to persist coordinate $index: $e');
+        }
+      });
+    }
   }
 
   WalkSnapshot _buildSnapshot(DateTime now) {
