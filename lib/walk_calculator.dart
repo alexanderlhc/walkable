@@ -31,4 +31,15 @@ double pace(double distanceMetres, Duration duration) {
   return minutes / km;
 }
 
+/// Formats a [minPerKm] pace as `m:ss`, returning [fallback] for the sentinel
+/// values from [pace]. Rounds to whole seconds and carries 60s into the next
+/// minute (so 11.997 → "12:00", never "11:60").
+String formatPace(double minPerKm, {required String fallback}) {
+  if (!minPerKm.isFinite || minPerKm == 0) return fallback;
+  final totalSeconds = (minPerKm * 60).round();
+  final m = totalSeconds ~/ 60;
+  final s = (totalSeconds % 60).toString().padLeft(2, '0');
+  return '$m:$s';
+}
+
 double _toRad(double deg) => deg * pi / 180;

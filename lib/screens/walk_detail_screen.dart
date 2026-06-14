@@ -91,11 +91,8 @@ class _StatsPanel extends StatelessWidget {
   }
 
   String _formatPace(double p, {required String fallback}) {
-    if (p == double.infinity || p == 0.0) return fallback;
-    final totalSeconds = (p * 60).round();
-    final m = totalSeconds ~/ 60;
-    final s = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$m:$s /km';
+    final formatted = formatPace(p, fallback: fallback);
+    return formatted == fallback ? formatted : '$formatted /km';
   }
 
   @override

@@ -153,10 +153,7 @@ class _WalkCard extends StatelessWidget {
     final coords = walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
     final minPerKm =
         pace(totalDistance(coords), walk.endTime!.difference(walk.startTime));
-    if (!minPerKm.isFinite || minPerKm == 0) return fallback;
-    final mm = minPerKm.floor();
-    final ss = ((minPerKm - mm) * 60).round().toString().padLeft(2, '0');
-    return '$mm:$ss';
+    return formatPace(minPerKm, fallback: fallback);
   }
 }
 

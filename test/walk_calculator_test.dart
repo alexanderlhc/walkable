@@ -54,4 +54,20 @@ void main() {
       expect(pace(1000, Duration.zero), 0.0);
     });
   });
+
+  group('formatPace', () {
+    test('formats whole minutes and seconds as m:ss', () {
+      expect(formatPace(7.5, fallback: '--'), '7:30');
+    });
+
+    test('carries 60 rounded seconds into the next minute', () {
+      // 11.997 min/km rounds to 720s → 12:00, never "11:60".
+      expect(formatPace(11.997, fallback: '--'), '12:00');
+    });
+
+    test('returns fallback for the infinity and zero sentinels', () {
+      expect(formatPace(double.infinity, fallback: '--'), '--');
+      expect(formatPace(0, fallback: '--'), '--');
+    });
+  });
 }
