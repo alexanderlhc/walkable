@@ -4,8 +4,8 @@ Repeatable Google Play screenshots for phone and 7" tablet, generated from the
 real app driven with seeded data — so every run produces the same images.
 
 ```
-tool/screenshots.sh            # phone + 7" tablet
-tool/screenshots.sh phone      # just one (phone | tablet)
+tool/screenshots.sh            # phone + 7" + 10" tablet
+tool/screenshots.sh phone      # just one (phone | tablet | tablet10)
 ```
 
 Output:
@@ -14,6 +14,10 @@ Output:
 |--------|--------|------|---------------|
 | Phone (Pixel 2) | `phone/` | 1080×1857 | Phone screenshots |
 | 7" tablet (Nexus 7 2013) | `tablet_7inch/` | 1200×1800 | 7-inch tablet screenshots |
+| 10" tablet (Nexus 10) | `tablet_10inch/` | 1600×2440 | 10-inch tablet screenshots |
+
+The 10" panel is landscape-native, so the harness pins it to a portrait LCD
+geometry (1600×2560) to keep every device portrait.
 
 Each folder has: `01-home`, `02-recording`, `03-detail`, `04-history`.
 
