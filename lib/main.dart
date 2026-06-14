@@ -8,6 +8,7 @@ import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
 import 'package:walkable/screens/walk_detail_screen.dart';
+import 'package:walkable/theme.dart';
 import 'package:walkable/walk_recorder.dart';
 
 void main() async {
@@ -42,6 +43,7 @@ class WalkableApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+      theme: buildAppTheme(Brightness.light),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       // Match the device language; fall back to English for anything we don't

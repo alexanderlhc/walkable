@@ -338,25 +338,26 @@ class _BottomPanelState extends State<_BottomPanel> {
   }
 
   Widget _buildIdle(AppLocalizations l10n) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(
       key: const Key('start_button'),
       onTap: widget.onStart,
       child: Container(
         height: 58,
         decoration: BoxDecoration(
-          color: Colors.black,
+          color: cs.primary,
           borderRadius: BorderRadius.circular(29),
         ),
         alignment: Alignment.center,
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 26),
+            Icon(Icons.play_arrow_rounded, color: cs.onPrimary, size: 26),
             const SizedBox(width: 8),
             Text(
               l10n.actionStart.toUpperCase(),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: cs.onPrimary,
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 1.4,
