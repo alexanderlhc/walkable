@@ -306,6 +306,7 @@ class _BottomPanelState extends State<_BottomPanel> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).padding.bottom;
     final l10n = AppLocalizations.of(context)!;
+    final cs = Theme.of(context).colorScheme;
 
     return Positioned(
       bottom: 0,
@@ -317,12 +318,12 @@ class _BottomPanelState extends State<_BottomPanel> {
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.88),
+              color: cs.surface.withValues(alpha: 0.88),
               borderRadius:
                   const BorderRadius.vertical(top: Radius.circular(28)),
               border: Border(
                 top: BorderSide(
-                  color: Colors.black.withValues(alpha: 0.06),
+                  color: cs.onSurface.withValues(alpha: 0.06),
                   width: 0.5,
                 ),
               ),
@@ -370,6 +371,7 @@ class _BottomPanelState extends State<_BottomPanel> {
   }
 
   Widget _buildActive(AppLocalizations l10n) {
+    final cs = Theme.of(context).colorScheme;
     final isRecording = widget.state == RecorderState.recording;
     final dist = widget.snapshot?.distanceMetres ?? 0.0;
     final elapsed = widget.snapshot?.elapsed ?? Duration.zero;
@@ -399,7 +401,7 @@ class _BottomPanelState extends State<_BottomPanel> {
                       : (isRecording ? l10n.statusRecording : l10n.statusPaused))
                   .toUpperCase(),
               style: TextStyle(
-                color: Colors.black.withValues(alpha: 0.40),
+                color: cs.onSurfaceVariant,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 1.5,
@@ -417,15 +419,13 @@ class _BottomPanelState extends State<_BottomPanel> {
                 value: (dist / 1000).toStringAsFixed(2),
                 unit: 'km',
               ),
-              VerticalDivider(
-                  color: Colors.black.withValues(alpha: 0.10), width: 1),
+              VerticalDivider(color: cs.outlineVariant, width: 1),
               _StatBlock(
                 label: l10n.statElapsed,
                 value: _fmtDuration(elapsed),
                 unit: null,
               ),
-              VerticalDivider(
-                  color: Colors.black.withValues(alpha: 0.10), width: 1),
+              VerticalDivider(color: cs.outlineVariant, width: 1),
               _StatBlock(
                 label: l10n.statPace,
                 value: _fmtPace(pace),
@@ -452,7 +452,7 @@ class _BottomPanelState extends State<_BottomPanel> {
                       isRecording
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
-                      color: Colors.black,
+                      color: cs.onSurface,
                       size: 22,
                     ),
                   ),
@@ -517,6 +517,7 @@ class _StatBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Expanded(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -524,7 +525,7 @@ class _StatBlock extends StatelessWidget {
           Text(
             label.toUpperCase(),
             style: TextStyle(
-              color: Colors.black.withValues(alpha: 0.40),
+              color: cs.onSurfaceVariant,
               fontSize: 10,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.1,
@@ -536,11 +537,11 @@ class _StatBlock extends StatelessWidget {
               children: [
                 TextSpan(
                   text: value,
-                  style: const TextStyle(
-                    color: Colors.black,
+                  style: TextStyle(
+                    color: cs.onSurface,
                     fontSize: 24,
                     fontWeight: FontWeight.w600,
-                    fontFeatures: [FontFeature.tabularFigures()],
+                    fontFeatures: const [FontFeature.tabularFigures()],
                     height: 1,
                   ),
                 ),
@@ -548,7 +549,7 @@ class _StatBlock extends StatelessWidget {
                   TextSpan(
                     text: ' $unit',
                     style: TextStyle(
-                      color: Colors.black.withValues(alpha: 0.40),
+                      color: cs.onSurfaceVariant,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                       height: 1,
@@ -591,7 +592,7 @@ class _PanelButton extends StatelessWidget {
           color: color ?? Colors.transparent,
           border: outlined
               ? Border.all(
-                  color: Colors.black.withValues(alpha: 0.18),
+                  color: Theme.of(context).colorScheme.outline,
                   width: 1.5,
                 )
               : null,
@@ -620,6 +621,7 @@ class _PillButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -629,7 +631,7 @@ class _PillButton extends StatelessWidget {
           borderRadius: BorderRadius.circular(26),
           border: outlined
               ? Border.all(
-                  color: Colors.black.withValues(alpha: 0.18),
+                  color: cs.outline,
                   width: 1.5,
                 )
               : null,
@@ -638,7 +640,7 @@ class _PillButton extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: outlined ? Colors.black : Colors.white,
+            color: outlined ? cs.onSurface : Colors.white,
             fontSize: 14,
             fontWeight: FontWeight.w700,
             letterSpacing: 1.2,
