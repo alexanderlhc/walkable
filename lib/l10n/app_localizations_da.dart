@@ -33,6 +33,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get actionFinish => 'Afslut';
 
   @override
+  String get actionRecenter => 'Centrér kort';
+
+  @override
   String get statDistance => 'Distance';
 
   @override
@@ -60,10 +63,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get locationPermissionDenied => 'Placeringstilladelse nægtet';
 
   @override
-  String get backgroundTrackingWarning => 'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
+  String get backgroundTrackingWarning =>
+      'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
 
   @override
-  String get batteryOptimizationWarning => 'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
+  String get batteryOptimizationWarning =>
+      'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
 
   @override
   String get openSettings => 'Indstillinger';

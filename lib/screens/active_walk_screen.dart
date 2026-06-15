@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
@@ -216,9 +217,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                     CircleMarker(
                       point: _currentPosition!,
                       radius: 8,
-                      color: Colors.blue,
+                      color: Theme.of(context).colorScheme.primary,
                       borderStrokeWidth: 2,
-                      borderColor: Colors.white,
+                      borderColor: Theme.of(context).colorScheme.surface,
                     ),
                   ],
                 ),
@@ -256,6 +257,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
               child: _MapChip(
                 key: const Key('recenter_button'),
                 onPressed: _recentring ? null : _onRecentre,
+                semanticLabel: l10n.actionRecenter,
                 icon: _recentring
                     ? const SizedBox(
                         width: 18,
@@ -346,39 +348,29 @@ class _BottomPanelState extends State<_BottomPanel> {
   }
 
   Widget _buildIdle(AppLocalizations l10n) {
-    final cs = Theme.of(context).colorScheme;
-    return GestureDetector(
+    return FilledButton.icon(
       key: const Key('start_button'),
-      onTap: widget.onStart,
-      child: Container(
-        height: 58,
-        decoration: BoxDecoration(
-          color: cs.primary,
-          borderRadius: BorderRadius.circular(29),
-        ),
-        alignment: Alignment.center,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.play_arrow_rounded, color: cs.onPrimary, size: 26),
-            const SizedBox(width: 8),
-            Text(
-              l10n.actionStart.toUpperCase(),
-              style: TextStyle(
-                color: cs.onPrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.4,
-              ),
-            ),
-          ],
+      onPressed: () {
+        HapticFeedback.lightImpact();
+        widget.onStart();
+      },
+      style: FilledButton.styleFrom(
+        minimumSize: const Size(double.infinity, 58),
+        shape: const StadiumBorder(),
+        textStyle: const TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.4,
         ),
       ),
+      icon: const Icon(Icons.play_arrow_rounded, size: 26),
+      label: Text(l10n.actionStart.toUpperCase()),
     );
   }
 
   Widget _buildActive(AppLocalizations l10n) {
     final cs = Theme.of(context).colorScheme;
+    final status = WalkStatusColors.of(context);
     final isRecording = widget.state == RecorderState.recording;
     final stats = widget.snapshot?.stats ??
         WalkStats.fromParts(coordinates: const [], duration: Duration.zero);
@@ -395,9 +387,9 @@ class _BottomPanelState extends State<_BottomPanel> {
               height: 6,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isRecording
-                    ? const Color(0xFF34C759)
-                    : const Color(0xFFFF9F0A),
+                // Conventional recorder semantics (green = recording, amber =
+                // paused), kept theme-aware via the WalkStatusColors extension.
+                color: isRecording ? status.recording : status.paused,
               ),
             ),
             const SizedBox(width: 6),
@@ -450,29 +442,41 @@ class _BottomPanelState extends State<_BottomPanel> {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  _PanelButton(
+                  IconButton.outlined(
                     key: isRecording
                         ? const Key('pause_button')
                         : const Key('resume_button'),
-                    onTap: isRecording ? widget.onPause : widget.onResume,
-                    size: 52,
-                    outlined: true,
-                    child: Icon(
+                    onPressed: isRecording ? widget.onPause : widget.onResume,
+                    // Tooltip doubles as the TalkBack label for this
+                    // icon-only control.
+                    tooltip: isRecording ? l10n.actionPause : l10n.actionResume,
+                    iconSize: 22,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(52, 52),
+                      fixedSize: const Size(52, 52),
+                    ),
+                    icon: Icon(
                       isRecording
                           ? Icons.pause_rounded
                           : Icons.play_arrow_rounded,
-                      color: cs.onSurface,
-                      size: 22,
                     ),
                   ),
                   const SizedBox(width: 20),
-                  _PanelButton(
+                  IconButton.filled(
                     key: const Key('stop_button'),
-                    onTap: () => setState(() => _confirmingStop = true),
-                    size: 64,
-                    color: const Color(0xFFFF3B30),
-                    child: const Icon(Icons.stop_rounded,
-                        color: Colors.white, size: 28),
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => _confirmingStop = true);
+                    },
+                    tooltip: l10n.actionStop,
+                    iconSize: 28,
+                    style: IconButton.styleFrom(
+                      minimumSize: const Size(64, 64),
+                      fixedSize: const Size(64, 64),
+                      backgroundColor: cs.error,
+                      foregroundColor: cs.onError,
+                    ),
+                    icon: const Icon(Icons.stop_rounded),
                   ),
                 ],
               ),
@@ -481,23 +485,42 @@ class _BottomPanelState extends State<_BottomPanel> {
   }
 
   Widget _buildConfirmStop(AppLocalizations l10n) {
+    final cs = Theme.of(context).colorScheme;
+    const labelStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.2,
+    );
     return Row(
       children: [
         Expanded(
-          child: _PillButton(
+          child: OutlinedButton(
             key: const Key('cancel_stop_button'),
-            onTap: () => setState(() => _confirmingStop = false),
-            label: l10n.actionCancel.toUpperCase(),
-            outlined: true,
+            onPressed: () => setState(() => _confirmingStop = false),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              shape: const StadiumBorder(),
+              textStyle: labelStyle,
+            ),
+            child: Text(l10n.actionCancel.toUpperCase()),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _PillButton(
+          child: FilledButton(
             key: const Key('confirm_stop_button'),
-            onTap: widget.onStop,
-            label: l10n.actionFinish.toUpperCase(),
-            color: const Color(0xFFFF3B30),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              widget.onStop();
+            },
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              shape: const StadiumBorder(),
+              backgroundColor: cs.error,
+              foregroundColor: cs.onError,
+              textStyle: labelStyle,
+            ),
+            child: Text(l10n.actionFinish.toUpperCase()),
           ),
         ),
       ],
@@ -561,140 +584,62 @@ class _StatBlock extends StatelessWidget {
   }
 }
 
-class _PanelButton extends StatelessWidget {
-  final VoidCallback onTap;
-  final double size;
-  final bool outlined;
-  final Color? color;
-  final Widget child;
-
-  const _PanelButton({
-    super.key,
-    required this.onTap,
-    required this.size,
-    required this.child,
-    this.outlined = false,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: color ?? Colors.transparent,
-          border: outlined
-              ? Border.all(
-                  color: Theme.of(context).colorScheme.outline,
-                  width: 1.5,
-                )
-              : null,
-        ),
-        alignment: Alignment.center,
-        child: child,
-      ),
-    );
-  }
-}
-
-// Full-width pill used by the Cancel / Finish confirmation row.
-class _PillButton extends StatelessWidget {
-  final VoidCallback onTap;
-  final String label;
-  final bool outlined;
-  final Color? color;
-
-  const _PillButton({
-    super.key,
-    required this.onTap,
-    required this.label,
-    this.outlined = false,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 52,
-        decoration: BoxDecoration(
-          color: color ?? Colors.transparent,
-          borderRadius: BorderRadius.circular(26),
-          border: outlined
-              ? Border.all(
-                  color: cs.outline,
-                  width: 1.5,
-                )
-              : null,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: outlined ? cs.onSurface : Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _MapChip extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget icon;
   final Widget? label;
+
+  /// Spoken label for icon-only chips (those with no [label] text). A chip
+  /// with a text label already reads it, so this can be left null there.
+  final String? semanticLabel;
 
   const _MapChip({
     super.key,
     required this.onPressed,
     required this.icon,
     this.label,
+    this.semanticLabel,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surface,
-      borderRadius: BorderRadius.circular(24),
-      elevation: 4,
-      shadowColor: Colors.black45,
-      child: InkWell(
-        onTap: onPressed,
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: Material(
+        // M3 uses the elevation surface tint rather than a hard drop shadow.
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: label != null ? 12 : 10,
-            vertical: 10,
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconTheme(
-                data: IconThemeData(
-                  color: Theme.of(context).colorScheme.onSurface,
-                  size: 18,
+        elevation: 4,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: label != null ? 12 : 10,
+              vertical: 10,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconTheme(
+                  data: IconThemeData(
+                    color: Theme.of(context).colorScheme.onSurface,
+                    size: 18,
+                  ),
+                  child: icon,
                 ),
-                child: icon,
-              ),
-              if (label != null) ...[
-                const SizedBox(width: 6),
-                DefaultTextStyle(
-                  style: Theme.of(context).textTheme.labelLarge!.copyWith(
-                        color: Theme.of(context).colorScheme.onSurface,
-                      ),
-                  child: label!,
-                ),
+                if (label != null) ...[
+                  const SizedBox(width: 6),
+                  DefaultTextStyle(
+                    style: Theme.of(context).textTheme.labelLarge!.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                    child: label!,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ),

@@ -33,6 +33,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionFinish => 'Finish';
 
   @override
+  String get actionRecenter => 'Recenter map';
+
+  @override
   String get statDistance => 'Distance';
 
   @override
@@ -60,10 +63,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get locationPermissionDenied => 'Location permission denied';
 
   @override
-  String get backgroundTrackingWarning => 'Notifications are off, so your walk may stop recording when the screen is locked.';
+  String get backgroundTrackingWarning =>
+      'Notifications are off, so your walk may stop recording when the screen is locked.';
 
   @override
-  String get batteryOptimizationWarning => 'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
+  String get batteryOptimizationWarning =>
+      'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
 
   @override
   String get openSettings => 'Settings';
