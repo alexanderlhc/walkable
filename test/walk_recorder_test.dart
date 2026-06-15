@@ -107,7 +107,7 @@ void main() {
     expect(snapshots.length, 2);
     expect(snapshots[0].polyline.length, 1);
     expect(snapshots[1].polyline.length, 2);
-    expect(snapshots[1].distanceMetres, greaterThan(0));
+    expect(snapshots[1].stats.distanceMetres, greaterThan(0));
   });
 
   test('snapshot exposes distance, elapsed, pace, and polyline', () async {
@@ -123,9 +123,9 @@ void main() {
     await sub.cancel();
 
     expect(latest, isNotNull);
-    expect(latest!.distanceMetres, greaterThan(0));
-    expect(latest!.elapsed, greaterThanOrEqualTo(Duration.zero));
-    expect(latest!.paceMinPerKm, isNot(double.infinity));
+    expect(latest!.stats.distanceMetres, greaterThan(0));
+    expect(latest!.stats.duration, greaterThanOrEqualTo(Duration.zero));
+    expect(latest!.stats.paceMinPerKm, isNot(double.infinity));
     expect(latest!.polyline.length, 2);
   });
 
@@ -170,7 +170,7 @@ void main() {
     location.emit(_pos(55.676, 12.568));
     await Future<void>.delayed(Duration.zero);
 
-    final elapsedAtPause = snapshots.last.elapsed;
+    final elapsedAtPause = snapshots.last.stats.duration!;
     await recorder.pause();
 
     // simulate a pause gap
@@ -184,7 +184,7 @@ void main() {
 
     // elapsed should only have grown by the tiny gap between resume and emit,
     // not by the 50ms pause gap
-    expect(snapshots.last.elapsed - elapsedAtPause,
+    expect(snapshots.last.stats.duration! - elapsedAtPause,
         lessThan(const Duration(milliseconds: 40)));
   });
 
@@ -208,6 +208,10 @@ void main() {
     expect(walks.length, 1);
     expect(walks[0].coordinates.length, 2);
     expect(walks[0].endTime, isNotNull);
-    expect(walks[0].endTime, isNotNull);
+    // The persisted duration is the canonical pause-aware moving time — the
+    // same value shown in the final emitted snapshot, not endTime - startTime.
+    expect(walks[0].duration, isNotNull);
+    expect(walks[0].duration!.inMilliseconds,
+        stopSnapshots.single.stats.duration!.inMilliseconds);
   });
 }

@@ -4,7 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/theme.dart';
-import 'package:walkable/walk_calculator.dart';
+import 'package:walkable/walk_stats.dart';
 
 class WalkDetailScreen extends StatelessWidget {
   final Walk walk;
@@ -14,19 +14,11 @@ class WalkDetailScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coords = walk.coordinates.map((c) => LatLng(c.lat, c.lng)).toList();
-
-    final calcCoords =
-        walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
-    final distanceMetres = totalDistance(calcCoords);
-
-    final duration = walk.endTime != null
-        ? walk.endTime!.difference(walk.startTime)
-        : Duration.zero;
-
-    final paceValue = pace(distanceMetres, duration);
+    final stats = WalkStats.of(walk);
 
     return Scaffold(
-      appBar: AppBar(title: Text(AppLocalizations.of(context)!.screenWalkDetail)),
+      appBar:
+          AppBar(title: Text(AppLocalizations.of(context)!.screenWalkDetail)),
       body: Column(
         children: [
           Expanded(
@@ -61,11 +53,7 @@ class WalkDetailScreen extends StatelessWidget {
               ],
             ),
           ),
-          _StatsPanel(
-            distanceMetres: distanceMetres,
-            duration: duration,
-            paceMinPerKm: paceValue,
-          ),
+          _StatsPanel(stats: stats),
         ],
       ),
     );
@@ -73,31 +61,14 @@ class WalkDetailScreen extends StatelessWidget {
 }
 
 class _StatsPanel extends StatelessWidget {
-  final double distanceMetres;
-  final Duration duration;
-  final double paceMinPerKm;
+  final WalkStats stats;
 
-  const _StatsPanel({
-    required this.distanceMetres,
-    required this.duration,
-    required this.paceMinPerKm,
-  });
-
-  String _formatDuration(Duration d) {
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
-  String _formatPace(double p, {required String fallback}) {
-    final formatted = formatPace(p, fallback: fallback);
-    return formatted == fallback ? formatted : '$formatted /km';
-  }
+  const _StatsPanel({required this.stats});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final pace = stats.formattedPace(fallback: l10n.paceUnavailable);
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -105,15 +76,15 @@ class _StatsPanel extends StatelessWidget {
         children: [
           _StatItem(
             label: l10n.statDistance,
-            value: l10n.unitKm((distanceMetres / 1000).toStringAsFixed(2)),
+            value: l10n.unitKm(stats.formattedDistance()),
           ),
           _StatItem(
             label: l10n.statDuration,
-            value: _formatDuration(duration),
+            value: stats.formattedDuration(fallback: l10n.durationUnavailable),
           ),
           _StatItem(
             label: l10n.statPace,
-            value: _formatPace(paceMinPerKm, fallback: l10n.paceUnavailable),
+            value: stats.paceMinPerKm.isFinite ? '$pace /km' : pace,
           ),
         ],
       ),

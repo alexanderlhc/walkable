@@ -5,7 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
-import 'package:walkable/walk_calculator.dart';
+import 'package:walkable/walk_stats.dart';
 
 class WalkHistoryScreen extends StatefulWidget {
   final WalkRepository repository;
@@ -72,6 +72,7 @@ class _WalkCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final l10n = AppLocalizations.of(context)!;
     final locale = Localizations.localeOf(context).toString();
+    final stats = WalkStats.of(walk);
 
     return Card(
       elevation: 0,
@@ -109,18 +110,19 @@ class _WalkCard extends StatelessWidget {
               child: Row(
                 children: [
                   _Stat(
-                    value: l10n.unitKm(_distanceKm(walk)),
+                    value: l10n.unitKm(stats.formattedDistance()),
                     label: l10n.statDistance,
                     emphasized: true,
                   ),
                   const SizedBox(width: 28),
                   _Stat(
-                    value: _duration(walk, fallback: l10n.durationUnavailable),
+                    value: stats.formattedDuration(
+                        fallback: l10n.durationUnavailable),
                     label: l10n.statDuration,
                   ),
                   const SizedBox(width: 28),
                   _Stat(
-                    value: _pace(walk, fallback: l10n.paceUnavailable),
+                    value: stats.formattedPace(fallback: l10n.paceUnavailable),
                     label: l10n.statPace,
                   ),
                   const Spacer(),
@@ -132,28 +134,6 @@ class _WalkCard extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _distanceKm(Walk walk) {
-    final coords = walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
-    return (totalDistance(coords) / 1000).toStringAsFixed(2);
-  }
-
-  static String _duration(Walk walk, {required String fallback}) {
-    if (walk.endTime == null) return fallback;
-    final diff = walk.endTime!.difference(walk.startTime);
-    final h = diff.inHours;
-    final m = diff.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = diff.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
-  static String _pace(Walk walk, {required String fallback}) {
-    if (walk.endTime == null) return fallback;
-    final coords = walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
-    final minPerKm =
-        pace(totalDistance(coords), walk.endTime!.difference(walk.startTime));
-    return formatPace(minPerKm, fallback: fallback);
   }
 }
 

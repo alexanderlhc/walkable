@@ -10,6 +10,7 @@ import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
 import 'package:walkable/theme.dart';
 import 'package:walkable/walk_recorder.dart';
+import 'package:walkable/walk_stats.dart';
 
 class ActiveWalkScreen extends StatefulWidget {
   final WalkRecorder recorder;
@@ -67,18 +68,15 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     if (!granted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content:
-              Text(AppLocalizations.of(context)!.locationPermissionDenied),
+          content: Text(AppLocalizations.of(context)!.locationPermissionDenied),
         ),
       );
       return;
     }
-    _positionSub = widget.recorder.locationService
-        .watchPosition()
-        .listen((pos) {
+    _positionSub =
+        widget.recorder.locationService.watchPosition().listen((pos) {
       if (!mounted) return;
-      setState(
-          () => _currentPosition = LatLng(pos.latitude, pos.longitude));
+      setState(() => _currentPosition = LatLng(pos.latitude, pos.longitude));
     });
   }
 
@@ -110,8 +108,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       setState(() => _recentring = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-            content:
-                Text(AppLocalizations.of(context)!.locationError('$e'))),
+            content: Text(AppLocalizations.of(context)!.locationError('$e'))),
       );
     }
   }
@@ -182,10 +179,8 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final points = _snapshot?.polyline
-            .map((c) => LatLng(c.lat, c.lng))
-            .toList() ??
-        [];
+    final points =
+        _snapshot?.polyline.map((c) => LatLng(c.lat, c.lng)).toList() ?? [];
 
     final topPadding = MediaQuery.of(context).padding.top + 12;
 
@@ -385,9 +380,8 @@ class _BottomPanelState extends State<_BottomPanel> {
   Widget _buildActive(AppLocalizations l10n) {
     final cs = Theme.of(context).colorScheme;
     final isRecording = widget.state == RecorderState.recording;
-    final dist = widget.snapshot?.distanceMetres ?? 0.0;
-    final elapsed = widget.snapshot?.elapsed ?? Duration.zero;
-    final pace = widget.snapshot?.paceMinPerKm ?? double.infinity;
+    final stats = widget.snapshot?.stats ??
+        WalkStats.fromParts(coordinates: const [], duration: Duration.zero);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -410,7 +404,9 @@ class _BottomPanelState extends State<_BottomPanel> {
             Text(
               (_confirmingStop
                       ? l10n.statusConfirmStop
-                      : (isRecording ? l10n.statusRecording : l10n.statusPaused))
+                      : (isRecording
+                          ? l10n.statusRecording
+                          : l10n.statusPaused))
                   .toUpperCase(),
               style: TextStyle(
                 color: cs.onSurfaceVariant,
@@ -428,20 +424,21 @@ class _BottomPanelState extends State<_BottomPanel> {
             children: [
               _StatBlock(
                 label: l10n.statDistance,
-                value: (dist / 1000).toStringAsFixed(2),
+                value: stats.formattedDistance(),
                 unit: 'km',
               ),
               VerticalDivider(color: cs.outlineVariant, width: 1),
               _StatBlock(
                 label: l10n.statElapsed,
-                value: _fmtDuration(elapsed),
+                value:
+                    stats.formattedDuration(fallback: l10n.durationUnavailable),
                 unit: null,
               ),
               VerticalDivider(color: cs.outlineVariant, width: 1),
               _StatBlock(
                 label: l10n.statPace,
-                value: _fmtPace(pace),
-                unit: pace.isFinite ? '/km' : null,
+                value: stats.formattedPace(fallback: l10n.paceUnavailable),
+                unit: stats.paceMinPerKm.isFinite ? '/km' : null,
               ),
             ],
           ),
@@ -505,18 +502,6 @@ class _BottomPanelState extends State<_BottomPanel> {
         ),
       ],
     );
-  }
-
-  static String _fmtDuration(Duration d) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return d.inHours > 0 ? '${d.inHours}:$m:$s' : '$m:$s';
-  }
-
-  static String _fmtPace(double p) {
-    if (!p.isFinite || p == 0) return '--:--';
-    final total = (p * 60).round();
-    return '${total ~/ 60}:${(total % 60).toString().padLeft(2, '0')}';
   }
 }
 
@@ -716,4 +701,3 @@ class _MapChip extends StatelessWidget {
     );
   }
 }
-

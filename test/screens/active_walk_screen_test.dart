@@ -8,6 +8,7 @@ import 'package:walkable/location/location_service.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
 import 'package:walkable/walk_recorder.dart';
+import 'package:walkable/walk_stats.dart';
 
 class MockWalkRecorder extends Mock implements WalkRecorder {}
 
@@ -42,6 +43,7 @@ void main() {
     when(() => locationService.watchPosition())
         .thenAnswer((_) => const Stream.empty());
     when(() => locationService.notificationsGranted).thenReturn(true);
+    when(() => locationService.batteryOptimizationGranted).thenReturn(true);
   });
 
   tearDown(() => snapshotsCtrl.close());
@@ -87,7 +89,8 @@ void main() {
     verify(() => locationService.checkAndRequestPermission()).called(1);
   });
 
-  testWidgets('snackbar shown when location permission is denied', (tester) async {
+  testWidgets('snackbar shown when location permission is denied',
+      (tester) async {
     when(() => locationService.checkAndRequestPermission())
         .thenAnswer((_) async => false);
 
@@ -126,7 +129,8 @@ void main() {
     expect(find.byKey(const Key('recenter_button')), findsNothing);
   });
 
-  testWidgets('re-centre button hidden when permission is denied', (tester) async {
+  testWidgets('re-centre button hidden when permission is denied',
+      (tester) async {
     when(() => locationService.checkAndRequestPermission())
         .thenAnswer((_) async => false);
 
@@ -138,7 +142,8 @@ void main() {
 
   // ─── recording state ───────────────────────────────────────────────────────
 
-  testWidgets('Stop and Pause buttons visible after tapping Start', (tester) async {
+  testWidgets('Stop and Pause buttons visible after tapping Start',
+      (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pumpAndSettle();
 
@@ -187,7 +192,8 @@ void main() {
     expect(find.text('RECORDING'), findsOneWidget);
   });
 
-  testWidgets('history button remains visible during recording', (tester) async {
+  testWidgets('history button remains visible during recording',
+      (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pumpAndSettle();
 
@@ -232,16 +238,18 @@ void main() {
 
   // ─── stats ─────────────────────────────────────────────────────────────────
 
-  testWidgets('stats section shown when recorder emits a snapshot', (tester) async {
+  testWidgets('stats section shown when recorder emits a snapshot',
+      (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pumpAndSettle();
 
     when(() => recorder.state).thenReturn(RecorderState.recording);
 
     snapshotsCtrl.add(WalkSnapshot(
-      distanceMetres: 1500,
-      elapsed: const Duration(minutes: 15),
-      paceMinPerKm: 10.0,
+      stats: const WalkStats(
+        distanceMetres: 1500,
+        duration: Duration(minutes: 15),
+      ),
       polyline: const [
         (lat: 55.676, lng: 12.568),
         (lat: 55.677, lng: 12.569),
@@ -288,7 +296,8 @@ void main() {
 
   // ─── stop ──────────────────────────────────────────────────────────────────
 
-  testWidgets('tapping Stop calls stop and reset, returns to idle', (tester) async {
+  testWidgets('tapping Stop calls stop and reset, returns to idle',
+      (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pumpAndSettle();
 

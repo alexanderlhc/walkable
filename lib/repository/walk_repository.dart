@@ -9,8 +9,9 @@ class WalkRepository {
   static Future<WalkRepository> inMemory() async {
     final db = await openDatabase(
       ':memory:',
-      version: 1,
+      version: 2,
       onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
     );
     return WalkRepository._(db);
   }
@@ -18,10 +19,19 @@ class WalkRepository {
   static Future<WalkRepository> open(String path) async {
     final db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createSchema,
+      onUpgrade: _upgradeSchema,
     );
     return WalkRepository._(db);
+  }
+
+  static Future<void> _upgradeSchema(
+      Database db, int oldVersion, int newVersion) async {
+    // v2 adds the persisted pause-aware moving time (duration_ms).
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE walks ADD COLUMN duration_ms INTEGER');
+    }
   }
 
   static Future<void> _createSchema(Database db, int version) async {
@@ -29,7 +39,8 @@ class WalkRepository {
       CREATE TABLE walks (
         id TEXT PRIMARY KEY,
         start_time INTEGER NOT NULL,
-        end_time INTEGER
+        end_time INTEGER,
+        duration_ms INTEGER
       )
     ''');
     await db.execute('''
@@ -73,11 +84,16 @@ class WalkRepository {
     });
   }
 
-  /// Marks a walk finished by recording its end time.
-  Future<void> finishWalk(String walkId, DateTime endTime) async {
+  /// Marks a walk finished by recording its end time and the pause-aware
+  /// moving [duration] accumulated during recording.
+  Future<void> finishWalk(
+      String walkId, DateTime endTime, Duration duration) async {
     await _db.update(
       'walks',
-      {'end_time': endTime.millisecondsSinceEpoch},
+      {
+        'end_time': endTime.millisecondsSinceEpoch,
+        'duration_ms': duration.inMilliseconds,
+      },
       where: 'id = ?',
       whereArgs: [walkId],
     );
@@ -91,6 +107,7 @@ class WalkRepository {
           'id': walk.id,
           'start_time': walk.startTime.millisecondsSinceEpoch,
           'end_time': walk.endTime?.millisecondsSinceEpoch,
+          'duration_ms': walk.duration?.inMilliseconds,
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -139,18 +156,25 @@ class WalkRepository {
       orderBy: 'sequence_index ASC',
     );
 
-    final coordinates = coordRows.map((c) => Coordinate(
-      lat: c['lat'] as double,
-      lng: c['lng'] as double,
-      recordedAt: DateTime.fromMillisecondsSinceEpoch(c['recorded_at'] as int),
-    )).toList();
+    final coordinates = coordRows
+        .map((c) => Coordinate(
+              lat: c['lat'] as double,
+              lng: c['lng'] as double,
+              recordedAt:
+                  DateTime.fromMillisecondsSinceEpoch(c['recorded_at'] as int),
+            ))
+        .toList();
 
     final endTimeMs = row['end_time'] as int?;
+    final durationMs = row['duration_ms'] as int?;
 
     return Walk(
       id: walkId,
       startTime: DateTime.fromMillisecondsSinceEpoch(row['start_time'] as int),
-      endTime: endTimeMs != null ? DateTime.fromMillisecondsSinceEpoch(endTimeMs) : null,
+      endTime: endTimeMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(endTimeMs)
+          : null,
+      duration: durationMs != null ? Duration(milliseconds: durationMs) : null,
       coordinates: coordinates,
     );
   }

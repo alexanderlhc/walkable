@@ -6,21 +6,18 @@ import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/walk_calculator.dart';
+import 'package:walkable/walk_stats.dart';
 
 enum RecorderState { idle, recording, paused, stopped }
 
 class WalkSnapshot {
-  final double distanceMetres;
-  final Duration elapsed;
-  final double paceMinPerKm;
+  /// The canonical stats (distance, duration, pace) for this moment.
+  final WalkStats stats;
+
+  /// The route so far, for drawing the live track.
   final List<Coord> polyline;
 
-  const WalkSnapshot({
-    required this.distanceMetres,
-    required this.elapsed,
-    required this.paceMinPerKm,
-    required this.polyline,
-  });
+  const WalkSnapshot({required this.stats, required this.polyline});
 }
 
 class WalkRecorder {
@@ -116,9 +113,10 @@ class WalkRecorder {
     final endTime = DateTime.now();
     _snapshots.add(_buildSnapshot(endTime));
 
-    // Drain pending coordinate writes, then mark the walk finished.
+    // Drain pending coordinate writes, then mark the walk finished with the
+    // canonical pause-aware moving time.
     await _persist;
-    await _repository.finishWalk(_id!, endTime);
+    await _repository.finishWalk(_id!, endTime, _elapsedAt(endTime));
   }
 
   void reset() {
@@ -163,16 +161,17 @@ class WalkRecorder {
     }
   }
 
+  /// Pause-aware moving time up to [now]: accumulated time plus the open
+  /// recording period, or just the accumulated time while paused.
+  Duration _elapsedAt(DateTime now) => _periodStart != null
+      ? _accumulatedDuration + now.difference(_periodStart!)
+      : _accumulatedDuration;
+
   WalkSnapshot _buildSnapshot(DateTime now) {
     final polyline = _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
-    final dist = totalDistance(polyline);
-    final elapsed = _periodStart != null
-        ? _accumulatedDuration + now.difference(_periodStart!)
-        : _accumulatedDuration;
     return WalkSnapshot(
-      distanceMetres: dist,
-      elapsed: elapsed,
-      paceMinPerKm: pace(dist, elapsed),
+      stats:
+          WalkStats.fromParts(coordinates: polyline, duration: _elapsedAt(now)),
       polyline: polyline,
     );
   }

@@ -9,11 +9,10 @@ final _testWalk = Walk(
   id: 'test-1',
   startTime: DateTime(2024, 1, 1, 10, 0, 0),
   endTime: DateTime(2024, 1, 1, 10, 30, 0),
+  duration: const Duration(minutes: 30),
   coordinates: [
     Coordinate(
-        lat: 55.6761,
-        lng: 12.5683,
-        recordedAt: DateTime(2024, 1, 1, 10, 0, 0)),
+        lat: 55.6761, lng: 12.5683, recordedAt: DateTime(2024, 1, 1, 10, 0, 0)),
     Coordinate(
         lat: 55.6800,
         lng: 12.5700,

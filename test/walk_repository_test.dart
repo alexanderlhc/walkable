@@ -26,8 +26,10 @@ void main() {
       startTime: DateTime(2026, 6, 1, 9, 0),
       endTime: DateTime(2026, 6, 1, 9, 30),
       coordinates: [
-        Coordinate(lat: 55.676, lng: 12.568, recordedAt: DateTime(2026, 6, 1, 9, 0)),
-        Coordinate(lat: 55.677, lng: 12.569, recordedAt: DateTime(2026, 6, 1, 9, 15)),
+        Coordinate(
+            lat: 55.676, lng: 12.568, recordedAt: DateTime(2026, 6, 1, 9, 0)),
+        Coordinate(
+            lat: 55.677, lng: 12.569, recordedAt: DateTime(2026, 6, 1, 9, 15)),
       ],
     );
 
@@ -100,10 +102,16 @@ void main() {
   group('incremental recording', () {
     test('createWalk + appendCoordinate persist an in-progress walk', () async {
       await repository.createWalk('live', DateTime(2026, 6, 1, 9, 0));
-      await repository.appendCoordinate('live',
-          Coordinate(lat: 1.0, lng: 1.0, recordedAt: DateTime(2026, 6, 1, 9, 0)), 0);
-      await repository.appendCoordinate('live',
-          Coordinate(lat: 2.0, lng: 2.0, recordedAt: DateTime(2026, 6, 1, 9, 1)), 1);
+      await repository.appendCoordinate(
+          'live',
+          Coordinate(
+              lat: 1.0, lng: 1.0, recordedAt: DateTime(2026, 6, 1, 9, 0)),
+          0);
+      await repository.appendCoordinate(
+          'live',
+          Coordinate(
+              lat: 2.0, lng: 2.0, recordedAt: DateTime(2026, 6, 1, 9, 1)),
+          1);
 
       // Recoverable even though finishWalk was never called (e.g. the process
       // was killed mid-walk): coordinates intact, end time still open.
@@ -112,12 +120,29 @@ void main() {
       expect(found.endTime, isNull);
     });
 
-    test('finishWalk records the end time', () async {
+    test('finishWalk records the end time and pause-aware duration', () async {
       await repository.createWalk('done', DateTime(2026, 6, 1, 9, 0));
-      await repository.finishWalk('done', DateTime(2026, 6, 1, 9, 30));
+      await repository.finishWalk(
+          'done', DateTime(2026, 6, 1, 9, 30), const Duration(minutes: 25));
 
       final found = await repository.findById('done');
       expect(found!.endTime, DateTime(2026, 6, 1, 9, 30));
+      // 25 min moving time, not the 30 min wall-clock span.
+      expect(found.duration, const Duration(minutes: 25));
     });
+  });
+
+  test('save round-trips the pause-aware duration', () async {
+    final walk = Walk(
+      id: 'walk-dur',
+      startTime: DateTime(2026, 6, 1, 9, 0),
+      endTime: DateTime(2026, 6, 1, 9, 30),
+      duration: const Duration(minutes: 22, seconds: 30),
+    );
+
+    await repository.save(walk);
+    final found = await repository.findById('walk-dur');
+
+    expect(found!.duration, const Duration(minutes: 22, seconds: 30));
   });
 }
