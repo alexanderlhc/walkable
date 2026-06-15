@@ -63,6 +63,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundTrackingWarning => 'Notifications are off, so your walk may stop recording when the screen is locked.';
 
   @override
+  String get batteryOptimizationWarning => 'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
+
+  @override
   String get openSettings => 'Settings';
 
   @override

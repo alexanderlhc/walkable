@@ -146,6 +146,18 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         ),
       );
     }
+    if (!widget.recorder.locationService.batteryOptimizationGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.batteryOptimizationWarning),
+          duration: const Duration(seconds: 8),
+          action: SnackBarAction(
+            label: l10n.openSettings,
+            onPressed: widget.recorder.locationService.openSettings,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _onPause() async {

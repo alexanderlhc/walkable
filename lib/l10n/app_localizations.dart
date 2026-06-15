@@ -203,6 +203,12 @@ abstract class AppLocalizations {
   /// **'Notifications are off, so your walk may stop recording when the screen is locked.'**
   String get backgroundTrackingWarning;
 
+  /// No description provided for @batteryOptimizationWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.'**
+  String get batteryOptimizationWarning;
+
   /// No description provided for @openSettings.
   ///
   /// In en, this message translates to:

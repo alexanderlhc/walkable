@@ -63,6 +63,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get backgroundTrackingWarning => 'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
 
   @override
+  String get batteryOptimizationWarning => 'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
+
+  @override
   String get openSettings => 'Indstillinger';
 
   @override

@@ -32,6 +32,20 @@ class FakeBackgroundLocationPermission
   }
 }
 
+class FakeBatteryOptimizationPermission
+    implements BatteryOptimizationPermission {
+  FakeBatteryOptimizationPermission({this.granted = true});
+
+  bool granted;
+  int ensureGrantedCalls = 0;
+
+  @override
+  Future<bool> ensureGranted() async {
+    ensureGrantedCalls++;
+    return granted;
+  }
+}
+
 Position _pos({double lat = 55.676, double lng = 12.568}) => Position(
       latitude: lat,
       longitude: lng,
@@ -49,16 +63,19 @@ void main() {
   late MockGeolocatorInterface mock;
   late FakeNotificationPermission notifications;
   late FakeBackgroundLocationPermission background;
+  late FakeBatteryOptimizationPermission batteryOptimization;
   late LocationService service;
 
   setUp(() {
     mock = MockGeolocatorInterface();
     notifications = FakeNotificationPermission();
     background = FakeBackgroundLocationPermission();
+    batteryOptimization = FakeBatteryOptimizationPermission();
     service = LocationService(
       geolocator: mock,
       notificationPermission: notifications,
       backgroundLocationPermission: background,
+      batteryOptimizationPermission: batteryOptimization,
     );
   });
 
@@ -142,6 +159,35 @@ void main() {
       await service.start();
 
       expect(service.notificationsGranted, isFalse);
+    });
+
+    test('requests battery optimisation exemption so Doze cannot kill GPS',
+        () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.always);
+      when(
+        () => mock.getPositionStream(
+            locationSettings: any(named: 'locationSettings')),
+      ).thenAnswer((_) => const Stream.empty());
+
+      await service.start();
+
+      expect(batteryOptimization.ensureGrantedCalls, 1);
+    });
+
+    test('batteryOptimizationGranted reflects whether exemption was granted',
+        () async {
+      batteryOptimization.granted = false;
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.always);
+      when(
+        () => mock.getPositionStream(
+            locationSettings: any(named: 'locationSettings')),
+      ).thenAnswer((_) => const Stream.empty());
+
+      await service.start();
+
+      expect(service.batteryOptimizationGranted, isFalse);
     });
 
     test('returns running if already started', () async {
