@@ -37,10 +37,47 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   LatLng? _currentPosition;
   StreamSubscription<Position>? _positionSub;
 
-  bool get _positionOutOfView {
-    if (_currentPosition == null) return false;
+  // Height of the bottom panel, reported by it after layout. The panel overlays
+  // the lower part of the map, so the camera treats that band as off-screen.
+  double _bottomPanelHeight = 0;
+
+  // One-shot auto-centre: when GPS goes from no-signal to its first fix, move
+  // the camera onto the user once. Deliberately NOT sticky — we don't re-centre
+  // on later updates (that would hijack the camera and fight the user panning),
+  // and we don't re-centre after a signal loss/regain. The manual recentre chip
+  // covers those cases.
+  bool _hasAutoCentered = false;
+
+  // Centre the camera on the first acquired fix, once. Guards camera access the
+  // same way [_positionOutOfView] does: if the map isn't laid out yet the move
+  // throws, and we leave [_hasAutoCentered] false so a later fix retries.
+  void _maybeAutoCentre(LatLng position) {
+    if (_hasAutoCentered) return;
     try {
-      return !_mapController.camera.visibleBounds.contains(_currentPosition!);
+      _mapController.move(position, _mapController.camera.zoom);
+      _hasAutoCentered = true;
+    } catch (_) {
+      // Map not ready; retry on the next fix.
+    }
+  }
+
+  // Whether the dot needs the recentre chip. Projects it to screen pixels and
+  // checks it against the map inset by a grace margin — wider at the bottom,
+  // where the panel hides the map. Without the grace the chip only appears once
+  // the dot has fully left the map; a dot merely tucked behind the panel (still
+  // inside the camera bounds) would otherwise stay hidden with no way back.
+  bool get _positionOutOfView {
+    final position = _currentPosition;
+    if (position == null) return false;
+    try {
+      final camera = _mapController.camera;
+      final offset = camera.latLngToScreenOffset(position);
+      final size = camera.nonRotatedSize;
+      const grace = 48.0;
+      return offset.dx < grace ||
+          offset.dy < grace ||
+          offset.dx > size.width - grace ||
+          offset.dy > size.height - _bottomPanelHeight - grace;
     } catch (_) {
       return false;
     }
@@ -57,6 +94,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         _recorderState = widget.recorder.state;
         if (last != null) _currentPosition = LatLng(last.lat, last.lng);
       });
+      if (last != null) _maybeAutoCentre(LatLng(last.lat, last.lng));
     });
     _requestPermission();
   }
@@ -77,7 +115,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     _positionSub =
         widget.recorder.locationService.watchPosition().listen((pos) {
       if (!mounted) return;
-      setState(() => _currentPosition = LatLng(pos.latitude, pos.longitude));
+      final latlng = LatLng(pos.latitude, pos.longitude);
+      setState(() => _currentPosition = latlng);
+      _maybeAutoCentre(latlng);
     });
   }
 
@@ -232,6 +272,11 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
             onPause: _onPause,
             onResume: _onResume,
             onStop: _onStop,
+            onHeightChanged: (height) {
+              if (mounted && height != _bottomPanelHeight) {
+                setState(() => _bottomPanelHeight = height);
+              }
+            },
           ),
           // History pill — top left
           Positioned(
@@ -284,6 +329,9 @@ class _BottomPanel extends StatefulWidget {
   final VoidCallback onPause;
   final VoidCallback onResume;
   final VoidCallback onStop;
+  // Reports the panel's rendered height so the map can treat the area it covers
+  // as off-screen when deciding whether to surface the recentre chip.
+  final ValueChanged<double> onHeightChanged;
 
   const _BottomPanel({
     required this.state,
@@ -292,6 +340,7 @@ class _BottomPanel extends StatefulWidget {
     required this.onPause,
     required this.onResume,
     required this.onStop,
+    required this.onHeightChanged,
   });
 
   @override
@@ -301,6 +350,7 @@ class _BottomPanel extends StatefulWidget {
 class _BottomPanelState extends State<_BottomPanel> {
   // While true, the controls row is replaced by a Cancel / Finish confirmation.
   bool _confirmingStop = false;
+  final GlobalKey _surfaceKey = GlobalKey();
 
   @override
   void didUpdateWidget(_BottomPanel oldWidget) {
@@ -317,6 +367,11 @@ class _BottomPanelState extends State<_BottomPanel> {
     final l10n = AppLocalizations.of(context)!;
     final cs = Theme.of(context).colorScheme;
 
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final height = _surfaceKey.currentContext?.size?.height;
+      if (height != null) widget.onHeightChanged(height);
+    });
+
     return Positioned(
       bottom: 0,
       left: 0,
@@ -326,6 +381,7 @@ class _BottomPanelState extends State<_BottomPanel> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
+            key: _surfaceKey,
             decoration: BoxDecoration(
               color: cs.surface.withValues(alpha: 0.88),
               borderRadius:

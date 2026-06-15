@@ -1,7 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
@@ -316,5 +318,118 @@ void main() {
     verify(() => recorder.reset()).called(1);
     expect(find.byKey(const Key('start_button')), findsOneWidget);
     expect(find.byKey(const Key('stop_button')), findsNothing);
+  });
+
+  // ─── auto-centre on first fix ────────────────────────────────────────────────
+
+  Position pos(double lat, double lng) => Position(
+        latitude: lat,
+        longitude: lng,
+        timestamp: DateTime.utc(2026),
+        accuracy: 5.0,
+        altitude: 0.0,
+        altitudeAccuracy: 0.0,
+        heading: 0.0,
+        headingAccuracy: 0.0,
+        speed: 1.4,
+        speedAccuracy: 0.0,
+      );
+
+  // The screen passes its own MapController to FlutterMap, so we can read the
+  // resulting camera straight off the rendered widget.
+  MapController cameraControllerOf(WidgetTester tester) =>
+      tester.widget<FlutterMap>(find.byType(FlutterMap)).mapController!;
+
+  testWidgets('auto-centres the map on the first fix from watchPosition',
+      (tester) async {
+    final positions = StreamController<Position>();
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    // New York — far from the hardcoded Copenhagen default centre.
+    positions.add(pos(40.7128, -74.0060));
+    await tester.pumpAndSettle();
+
+    final camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(40.7128, 0.0001));
+    expect(camera.center.longitude, closeTo(-74.0060, 0.0001));
+
+    await positions.close();
+  });
+
+  testWidgets('auto-centres the map on the first fix from the snapshots stream',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    when(() => recorder.state).thenReturn(RecorderState.recording);
+    snapshotsCtrl.add(WalkSnapshot(
+      stats: const WalkStats(distanceMetres: 0, duration: Duration.zero),
+      polyline: const [(lat: 40.7128, lng: -74.0060)],
+    ));
+    await tester.pumpAndSettle();
+
+    final camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(40.7128, 0.0001));
+    expect(camera.center.longitude, closeTo(-74.0060, 0.0001));
+  });
+
+  testWidgets('does not re-centre on later fixes (one-shot, lets the user pan)',
+      (tester) async {
+    final positions = StreamController<Position>();
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    positions.add(pos(40.7128, -74.0060)); // first fix → auto-centre
+    await tester.pumpAndSettle();
+
+    // Simulate the user panning the map away from the dot.
+    final controller = cameraControllerOf(tester);
+    controller.move(const LatLng(48.8566, 2.3522), controller.camera.zoom);
+    await tester.pumpAndSettle();
+
+    positions.add(pos(34.0522, -118.2437)); // second fix → must NOT hijack camera
+    await tester.pumpAndSettle();
+
+    final camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(48.8566, 0.0001)); // still Paris
+    expect(camera.center.longitude, closeTo(2.3522, 0.0001));
+
+    await positions.close();
+  });
+
+  testWidgets(
+      'recentre chip appears when the dot is hidden behind the bottom panel',
+      (tester) async {
+    final positions = StreamController<Position>();
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    // First fix auto-centres; the dot sits mid-map, comfortably in view.
+    positions.add(pos(55.0, 12.0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recenter_button')), findsNothing);
+
+    // A later fix that lands inside the bottom panel's footprint — on the map,
+    // and well clear of the screen edges, but hidden behind the panel.
+    final panel = tester.getRect(find.byType(BackdropFilter));
+    final camera = cameraControllerOf(tester).camera;
+    final behindPanel =
+        camera.screenOffsetToLatLng(Offset(panel.center.dx, panel.top + 6));
+    positions.add(pos(behindPanel.latitude, behindPanel.longitude));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('recenter_button')), findsOneWidget);
+
+    await positions.close();
   });
 }
