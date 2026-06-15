@@ -36,6 +36,7 @@ class WalkRecorder {
   Duration _accumulatedDuration = Duration.zero;
   final List<Coordinate> _coordinates = [];
   StreamSubscription<Position>? _subscription;
+  Timer? _ticker;
   ForegroundNotificationText? _notification;
   // Serializes incremental DB writes and lets stop() drain them before
   // finalizing the walk.
@@ -66,6 +67,11 @@ class WalkRecorder {
     // Persist the walk row up front so an in-progress walk survives a kill.
     _persist = _repository.createWalk(_id!, _startTime!);
     _subscription = locationService.positions.listen(_onPosition);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_state == RecorderState.recording) {
+        _snapshots.add(_buildSnapshot(DateTime.now()));
+      }
+    });
     return LocationServiceResult.started;
   }
 
@@ -75,6 +81,8 @@ class WalkRecorder {
     _accumulatedDuration += now.difference(_periodStart!);
     _periodStart = null;
     _state = RecorderState.paused;
+    _ticker?.cancel();
+    _ticker = null;
     await _subscription?.cancel();
     _subscription = null;
     await locationService.stop();
@@ -87,12 +95,19 @@ class WalkRecorder {
     _periodStart = DateTime.now();
     await locationService.start(notification: _notification);
     _subscription = locationService.positions.listen(_onPosition);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_state == RecorderState.recording) {
+        _snapshots.add(_buildSnapshot(DateTime.now()));
+      }
+    });
   }
 
   Future<void> stop() async {
     if (_state != RecorderState.recording && _state != RecorderState.paused) {
       return;
     }
+    _ticker?.cancel();
+    _ticker = null;
     await _subscription?.cancel();
     _subscription = null;
     await locationService.stop();
@@ -118,6 +133,7 @@ class WalkRecorder {
   }
 
   void dispose() {
+    _ticker?.cancel();
     _subscription?.cancel();
     _snapshots.close();
   }
