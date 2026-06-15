@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/main.dart';
 import 'package:walkable/repository/walk_repository.dart';

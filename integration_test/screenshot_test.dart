@@ -52,8 +52,10 @@ void main() {
     final geo = _FakeGeolocator(_base);
     final location = LocationService(
       geolocator: geo,
-      notificationPermission: _GrantedNotifications(),
-      backgroundLocationPermission: _GrantedBackgroundLocation(),
+      permissions: {
+        LocationPermissionKind.notification: _GrantedPermission(),
+        LocationPermissionKind.background: _GrantedPermission(),
+      },
     );
     final recorder = WalkRecorder(
       locationService: location,
@@ -200,12 +202,7 @@ List<Coordinate> _loop({required double radiusMetres, required double phase}) {
 
 // ─── Fakes ───────────────────────────────────────────────────────────────────
 
-class _GrantedNotifications implements NotificationPermission {
-  @override
-  Future<bool> ensureGranted() async => true;
-}
-
-class _GrantedBackgroundLocation implements BackgroundLocationPermission {
+class _GrantedPermission implements RuntimePermission {
   @override
   Future<bool> ensureGranted() async => true;
 }
