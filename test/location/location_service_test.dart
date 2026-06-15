@@ -5,36 +5,8 @@ import 'package:walkable/location/location_service.dart';
 
 class MockGeolocatorInterface extends Mock implements GeolocatorInterface {}
 
-class FakeNotificationPermission implements NotificationPermission {
-  FakeNotificationPermission({this.granted = true});
-
-  bool granted;
-  int ensureGrantedCalls = 0;
-
-  @override
-  Future<bool> ensureGranted() async {
-    ensureGrantedCalls++;
-    return granted;
-  }
-}
-
-class FakeBackgroundLocationPermission
-    implements BackgroundLocationPermission {
-  FakeBackgroundLocationPermission({this.granted = true});
-
-  bool granted;
-  int ensureGrantedCalls = 0;
-
-  @override
-  Future<bool> ensureGranted() async {
-    ensureGrantedCalls++;
-    return granted;
-  }
-}
-
-class FakeBatteryOptimizationPermission
-    implements BatteryOptimizationPermission {
-  FakeBatteryOptimizationPermission({this.granted = true});
+class FakeRuntimePermission implements RuntimePermission {
+  FakeRuntimePermission({this.granted = true});
 
   bool granted;
   int ensureGrantedCalls = 0;
@@ -61,21 +33,23 @@ Position _pos({double lat = 55.676, double lng = 12.568}) => Position(
 
 void main() {
   late MockGeolocatorInterface mock;
-  late FakeNotificationPermission notifications;
-  late FakeBackgroundLocationPermission background;
-  late FakeBatteryOptimizationPermission batteryOptimization;
+  late FakeRuntimePermission notifications;
+  late FakeRuntimePermission background;
+  late FakeRuntimePermission batteryOptimization;
   late LocationService service;
 
   setUp(() {
     mock = MockGeolocatorInterface();
-    notifications = FakeNotificationPermission();
-    background = FakeBackgroundLocationPermission();
-    batteryOptimization = FakeBatteryOptimizationPermission();
+    notifications = FakeRuntimePermission();
+    background = FakeRuntimePermission();
+    batteryOptimization = FakeRuntimePermission();
     service = LocationService(
       geolocator: mock,
-      notificationPermission: notifications,
-      backgroundLocationPermission: background,
-      batteryOptimizationPermission: batteryOptimization,
+      permissions: {
+        LocationPermissionKind.notification: notifications,
+        LocationPermissionKind.background: background,
+        LocationPermissionKind.batteryOptimization: batteryOptimization,
+      },
     );
   });
 

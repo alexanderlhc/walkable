@@ -13,80 +13,82 @@ abstract interface class GeolocatorInterface {
   Stream<Position> getPositionStream({LocationSettings? locationSettings});
 }
 
-/// Ensures the Android notification permission needed to show the
-/// location foreground-service notification (required on Android 13+).
-abstract interface class NotificationPermission {
-  /// Requests the permission if needed. Returns whether notifications are
-  /// permitted afterwards — `false` means the foreground-service notification
-  /// can't show, so background tracking will be unreliable.
-  Future<bool> ensureGranted();
-}
+/// Decides whether a runtime permission should be (re-)requested given its
+/// current [PermissionStatus]. This is where per-permission policy varies:
+/// notification only re-requests while explicitly denied (a permanent denial
+/// can't be re-prompted), whereas the others request whenever not yet granted.
+typedef ShouldRequest = bool Function(PermissionStatus status);
 
-class _DefaultNotificationPermission implements NotificationPermission {
-  @override
-  Future<bool> ensureGranted() async {
-    // Only Android gates the foreground-service notification this way.
-    if (defaultTargetPlatform != TargetPlatform.android) return true;
-    var status = await Permission.notification.status;
-    if (status.isDenied) {
-      status = await Permission.notification.request();
-    }
-    return status.isGranted;
-  }
-}
-
-/// Ensures the app is exempt from Android's battery optimisation (Doze mode).
-/// Without the exemption, the OS can suspend GPS even for a foreground service
-/// once the screen locks — resulting in only a start and end point being
-/// recorded. Fitness tracking apps routinely require this exemption.
-abstract interface class BatteryOptimizationPermission {
-  /// Requests the exemption if needed. Returns whether it is granted
-  /// afterwards. Best-effort: a `false` result means GPS may be suspended by
-  /// Doze, but recording can still proceed.
-  Future<bool> ensureGranted();
-}
-
-class _DefaultBatteryOptimizationPermission
-    implements BatteryOptimizationPermission {
-  @override
-  Future<bool> ensureGranted() async {
-    if (defaultTargetPlatform != TargetPlatform.android) return true;
-    var status = await Permission.ignoreBatteryOptimizations.status;
-    if (!status.isGranted) {
-      status = await Permission.ignoreBatteryOptimizations.request();
-    }
-    return status.isGranted;
-  }
-}
-
-/// Ensures the "Allow all the time" background-location permission. Without it
-/// Android only delivers location updates while the app is in use, so a walk
-/// stops being tracked once the screen locks or you switch apps.
-abstract interface class BackgroundLocationPermission {
+/// A single Android runtime permission the location service ensures before or
+/// during tracking. Best-effort: a `false` result never blocks recording, it
+/// just signals that some background reliability is lost (see the per-role
+/// notes in [defaultLocationPermissions]).
+abstract interface class RuntimePermission {
   /// Requests the permission if needed. Returns whether it is granted
-  /// afterwards. Best-effort: a `false` result means screen-off tracking will
-  /// be unreliable, but recording can still proceed.
+  /// afterwards.
   Future<bool> ensureGranted();
 }
 
-class _DefaultBackgroundLocationPermission
-    implements BackgroundLocationPermission {
+/// The role each [RuntimePermission] plays for the location service.
+enum LocationPermissionKind { background, notification, batteryOptimization }
+
+/// Default [RuntimePermission] backed by permission_handler. The
+/// Android-platform guard plus the check-then-request-if-needed logic lives
+/// here in one place; [permission] and [shouldRequest] carry the only real
+/// per-permission variation.
+class AndroidRuntimePermission implements RuntimePermission {
+  AndroidRuntimePermission({
+    required this.permission,
+    required this.shouldRequest,
+  });
+
+  final Permission permission;
+  final ShouldRequest shouldRequest;
+
   @override
   Future<bool> ensureGranted() async {
-    // Only Android distinguishes background ("all the time") location.
+    // Only Android gates tracking on these runtime permissions.
     if (defaultTargetPlatform != TargetPlatform.android) return true;
-    var status = await Permission.locationAlways.status;
-    if (!status.isGranted) {
-      status = await Permission.locationAlways.request();
+    var status = await permission.status;
+    if (shouldRequest(status)) {
+      status = await permission.request();
     }
     return status.isGranted;
   }
 }
+
+/// The runtime permissions the location service ensures, keyed by role.
+///
+/// - [LocationPermissionKind.background]: the "Allow all the time"
+///   background-location permission. Without it Android only delivers updates
+///   while the app is in use, so a walk stops being tracked once the screen
+///   locks or you switch apps. Requested whenever not yet granted.
+/// - [LocationPermissionKind.notification]: the Android 13+ permission needed
+///   to show the foreground-service notification; without a visible
+///   notification the OS throttles/kills GPS once the screen locks. Only
+///   re-requested while explicitly denied.
+/// - [LocationPermissionKind.batteryOptimization]: exemption from Android's
+///   battery optimisation (Doze mode), which can otherwise suspend GPS even for
+///   a foreground service once the screen locks. Requested whenever not yet
+///   granted.
+Map<LocationPermissionKind, RuntimePermission> defaultLocationPermissions() => {
+      LocationPermissionKind.background: AndroidRuntimePermission(
+        permission: Permission.locationAlways,
+        shouldRequest: (status) => !status.isGranted,
+      ),
+      LocationPermissionKind.notification: AndroidRuntimePermission(
+        permission: Permission.notification,
+        shouldRequest: (status) => status.isDenied,
+      ),
+      LocationPermissionKind.batteryOptimization: AndroidRuntimePermission(
+        permission: Permission.ignoreBatteryOptimizations,
+        shouldRequest: (status) => !status.isGranted,
+      ),
+    };
 
 class _DefaultGeolocator implements GeolocatorInterface {
   @override
-  Future<LocationPermission> checkPermission() =>
-      Geolocator.checkPermission();
+  Future<LocationPermission> checkPermission() => Geolocator.checkPermission();
 
   @override
   Future<LocationPermission> requestPermission() =>
@@ -116,21 +118,15 @@ class ForegroundNotificationText {
 class LocationService {
   LocationService({
     GeolocatorInterface? geolocator,
-    NotificationPermission? notificationPermission,
-    BackgroundLocationPermission? backgroundLocationPermission,
-    BatteryOptimizationPermission? batteryOptimizationPermission,
+    Map<LocationPermissionKind, RuntimePermission>? permissions,
   })  : _geolocator = geolocator ?? _DefaultGeolocator(),
-        _notificationPermission =
-            notificationPermission ?? _DefaultNotificationPermission(),
-        _backgroundLocationPermission = backgroundLocationPermission ??
-            _DefaultBackgroundLocationPermission(),
-        _batteryOptimizationPermission = batteryOptimizationPermission ??
-            _DefaultBatteryOptimizationPermission();
+        // Merge any injected overrides over the defaults so the map is always
+        // complete — callers (and tests) can supply just the roles they care
+        // about.
+        _permissions = {...defaultLocationPermissions(), ...?permissions};
 
   final GeolocatorInterface _geolocator;
-  final NotificationPermission _notificationPermission;
-  final BackgroundLocationPermission _backgroundLocationPermission;
-  final BatteryOptimizationPermission _batteryOptimizationPermission;
+  final Map<LocationPermissionKind, RuntimePermission> _permissions;
   final StreamController<Position> _controller =
       StreamController<Position>.broadcast();
   StreamSubscription<Position>? _subscription;
@@ -174,12 +170,12 @@ class LocationService {
     // Escalate to "Allow all the time" so updates keep coming with the screen
     // off. Best-effort: declining doesn't block recording, just makes
     // background tracking unreliable (and the user can be warned).
-    _backgroundGranted = await _backgroundLocationPermission.ensureGranted();
+    _backgroundGranted =
+        await _permissions[LocationPermissionKind.background]!.ensureGranted();
     return true;
   }
 
-  Future<Position> getCurrentPosition() =>
-      _geolocator.getCurrentPosition();
+  Future<Position> getCurrentPosition() => _geolocator.getCurrentPosition();
 
   Stream<Position> watchPosition() => _geolocator.getPositionStream(
         locationSettings:
@@ -200,13 +196,16 @@ class LocationService {
     // this runtime permission, and without a visible notification the OS will
     // throttle/kill GPS once the screen locks. Best-effort: failure to grant
     // doesn't block recording, it just makes background tracking less reliable.
-    _notificationsGranted = await _notificationPermission.ensureGranted();
+    _notificationsGranted =
+        await _permissions[LocationPermissionKind.notification]!
+            .ensureGranted();
 
     // Without a battery-optimisation exemption, Android's Doze mode can
     // suspend GPS even when the foreground service + wake lock are active.
     // The system dialog lets the user grant the exemption in one tap.
     _batteryOptimizationGranted =
-        await _batteryOptimizationPermission.ensureGranted();
+        await _permissions[LocationPermissionKind.batteryOptimization]!
+            .ensureGranted();
 
     _running = true;
     _subscription = _geolocator
