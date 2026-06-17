@@ -230,6 +230,14 @@ class LocationService {
     if (defaultTargetPlatform == TargetPlatform.android) {
       return AndroidSettings(
         accuracy: LocationAccuracy.high,
+        // Request a fix every second (1 Hz), the standard sampling rate for
+        // sport/walk trackers and the GPS chip's native cadence. Without an
+        // explicit interval the FusedLocationProvider picks a conservative one,
+        // producing sparse points and long straight segments on the map.
+        // distanceFilter 0 keeps fixes coming even at slow walking pace so
+        // curves aren't lost.
+        intervalDuration: const Duration(seconds: 1),
+        distanceFilter: 0,
         foregroundNotificationConfig: ForegroundNotificationConfig(
           notificationText: notification?.body ?? 'Recording your walk',
           notificationTitle: notification?.title ?? 'Walk in progress',
