@@ -232,7 +232,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: const LatLng(55.6761, 12.5683),
-              initialZoom: 15,
+              initialZoom: 17,
               onPositionChanged: (_, __) => setState(() {}),
             ),
             children: [
