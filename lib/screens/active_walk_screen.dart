@@ -350,6 +350,9 @@ class _BottomPanel extends StatefulWidget {
 class _BottomPanelState extends State<_BottomPanel> {
   // While true, the controls row is replaced by a Cancel / Finish confirmation.
   bool _confirmingStop = false;
+  // True when our own stop-press paused the walk, so Cancel knows to resume it.
+  // A walk that was already paused before stop stays paused on Cancel.
+  bool _pausedForConfirm = false;
   final GlobalKey _surfaceKey = GlobalKey();
 
   @override
@@ -358,6 +361,7 @@ class _BottomPanelState extends State<_BottomPanel> {
     // Leaving the active state (walk finished) clears any pending confirmation.
     if (widget.state == RecorderState.idle && _confirmingStop) {
       _confirmingStop = false;
+      _pausedForConfirm = false;
     }
   }
 
@@ -522,6 +526,13 @@ class _BottomPanelState extends State<_BottomPanel> {
                     key: const Key('stop_button'),
                     onPressed: () {
                       HapticFeedback.lightImpact();
+                      // Freeze the walk (and its counter) while the user
+                      // decides whether to finish. Remember that we did so, so
+                      // Cancel can resume it.
+                      if (widget.state == RecorderState.recording) {
+                        widget.onPause();
+                        _pausedForConfirm = true;
+                      }
                       setState(() => _confirmingStop = true);
                     },
                     tooltip: l10n.actionStop,
@@ -552,7 +563,14 @@ class _BottomPanelState extends State<_BottomPanel> {
         Expanded(
           child: OutlinedButton(
             key: const Key('cancel_stop_button'),
-            onPressed: () => setState(() => _confirmingStop = false),
+            onPressed: () {
+              // Resume only if our stop-press was what paused the walk.
+              if (_pausedForConfirm) {
+                widget.onResume();
+                _pausedForConfirm = false;
+              }
+              setState(() => _confirmingStop = false);
+            },
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(52),
               shape: const StadiumBorder(),
