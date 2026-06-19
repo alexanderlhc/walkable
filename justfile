@@ -59,6 +59,14 @@ bundle:
 screenshots device="":
     tool/screenshots.sh {{device}}
 
+# Record the Play Store walk-recording walkthrough video (Aarhus). Boots an
+# emulator, screen-records the in-app walk, and writes an MP4 to upload to
+# YouTube for the Location-permissions "Video instructions" field.
+#   just walkthrough                       # → build/walkthrough.mp4
+#   just walkthrough docs/walkthrough.mp4
+walkthrough out="":
+    tool/walkthrough_video.sh {{out}}
+
 # Remove build artifacts.
 clean:
     {{flutter}} clean
