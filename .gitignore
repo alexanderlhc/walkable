@@ -1,3 +1,6 @@
+# Google Play service account key (never commit)
+play-store-key.json
+
 # Miscellaneous
 *.class
 *.lock
