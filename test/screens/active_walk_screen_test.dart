@@ -42,8 +42,10 @@ void main() {
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => snapshotsCtrl.stream);
     when(() => recorder.locationService).thenReturn(locationService);
-    when(() => recorder.start(notification: any(named: 'notification')))
-        .thenAnswer((_) async => LocationServiceResult.started);
+    when(() => recorder.start(
+          notification: any(named: 'notification'),
+          backgroundConsent: any(named: 'backgroundConsent'),
+        )).thenAnswer((_) async => LocationServiceResult.started);
     when(() => recorder.pause()).thenAnswer((_) async {});
     when(() => recorder.resume()).thenAnswer((_) async {});
     when(() => recorder.stop()).thenAnswer((_) async {});
@@ -237,8 +239,10 @@ void main() {
     await tester.tap(find.byKey(const Key('start_button')));
     await tester.pumpAndSettle();
 
-    verify(() => recorder.start(notification: any(named: 'notification')))
-        .called(1);
+    verify(() => recorder.start(
+          notification: any(named: 'notification'),
+          backgroundConsent: any(named: 'backgroundConsent'),
+        )).called(1);
     expect(find.byKey(const Key('stop_button')), findsOneWidget);
     expect(find.byKey(const Key('pause_button')), findsOneWidget);
     expect(find.byKey(const Key('start_button')), findsNothing);
@@ -269,6 +273,65 @@ void main() {
 
     expect(preview.hasListener, isFalse,
         reason: 'preview stream must be cancelled when recording starts');
+  });
+
+  testWidgets(
+      'shows the prominent disclosure before the background prompt, '
+      'and accepting resolves the consent gate true', (tester) async {
+    bool? consentResult;
+    // When Start runs, drive the consent gate the screen handed us and record
+    // its outcome — this is the disclosure → OS-prompt ordering Play requires.
+    when(() => recorder.start(
+          notification: any(named: 'notification'),
+          backgroundConsent: any(named: 'backgroundConsent'),
+        )).thenAnswer((invocation) async {
+      final consent = invocation.namedArguments[#backgroundConsent]
+          as Future<bool> Function();
+      consentResult = await consent();
+      return LocationServiceResult.started;
+    });
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pump(); // surface the dialog without resolving start()
+
+    expect(find.text('Allow background location'), findsOneWidget);
+    expect(
+      find.textContaining('even when the app is closed'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(consentResult, isTrue);
+  });
+
+  testWidgets('declining the disclosure resolves the consent gate false',
+      (tester) async {
+    bool? consentResult;
+    when(() => recorder.start(
+          notification: any(named: 'notification'),
+          backgroundConsent: any(named: 'backgroundConsent'),
+        )).thenAnswer((invocation) async {
+      final consent = invocation.namedArguments[#backgroundConsent]
+          as Future<bool> Function();
+      consentResult = await consent();
+      return LocationServiceResult.started;
+    });
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pump();
+
+    await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
+
+    expect(consentResult, isFalse);
   });
 
   testWidgets('warns with a recovery action when notifications are off',

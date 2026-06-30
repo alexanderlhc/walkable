@@ -19,14 +19,30 @@ abstract interface class GeolocatorInterface {
 /// can't be re-prompted), whereas the others request whenever not yet granted.
 typedef ShouldRequest = bool Function(PermissionStatus status);
 
+/// Gate run immediately before the OS background-location prompt. Returns
+/// whether the user agreed to continue. This is where the Google Play
+/// "Prominent Disclosure" dialog is shown: the disclosure must appear, and the
+/// user must affirmatively accept it, *before* `ACCESS_BACKGROUND_LOCATION` is
+/// ever requested. Returning `false` (the user declined) means the OS prompt is
+/// skipped entirely.
+typedef BackgroundLocationConsent = Future<bool> Function();
+
 /// A single Android runtime permission the location service ensures before or
 /// during tracking. Best-effort: a `false` result never blocks recording, it
 /// just signals that some background reliability is lost (see the per-role
 /// notes in [defaultLocationPermissions]).
 abstract interface class RuntimePermission {
+  /// Whether the permission is already granted, without prompting.
+  Future<bool> isGranted();
+
   /// Requests the permission if needed. Returns whether it is granted
   /// afterwards.
-  Future<bool> ensureGranted();
+  ///
+  /// When [consent] is supplied it is awaited immediately before the OS prompt
+  /// (and only when a prompt is actually about to happen); a `false` result
+  /// skips the prompt and leaves the permission ungranted. This is how the
+  /// background-location disclosure is enforced ahead of the system dialog.
+  Future<bool> ensureGranted({BackgroundLocationConsent? consent});
 }
 
 /// The role each [RuntimePermission] plays for the location service.
@@ -46,11 +62,20 @@ class AndroidRuntimePermission implements RuntimePermission {
   final ShouldRequest shouldRequest;
 
   @override
-  Future<bool> ensureGranted() async {
+  Future<bool> isGranted() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    return (await permission.status).isGranted;
+  }
+
+  @override
+  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async {
     // Only Android gates tracking on these runtime permissions.
     if (defaultTargetPlatform != TargetPlatform.android) return true;
     var status = await permission.status;
     if (shouldRequest(status)) {
+      // Show the prominent disclosure right before the OS prompt. Declining
+      // skips the prompt and leaves the permission as-is.
+      if (consent != null && !await consent()) return status.isGranted;
       status = await permission.request();
     }
     return status.isGranted;
@@ -156,7 +181,18 @@ class LocationService {
   /// Opens the OS app settings so the user can re-enable a denied permission.
   Future<void> openSettings() => openAppSettings();
 
-  Future<bool> checkAndRequestPermission() async {
+  /// Ensures foreground location, then optionally escalates to "Allow all the
+  /// time" background location.
+  ///
+  /// Background location is requested **only** when [backgroundConsent] is
+  /// supplied — it is the Google Play "Prominent Disclosure" gate, shown and
+  /// affirmatively accepted before the OS background prompt. Without it (e.g.
+  /// the foreground-only request on screen open, or resuming a paused walk) we
+  /// never silently prompt for background; [backgroundGranted] then just
+  /// reflects whatever was granted earlier.
+  Future<bool> checkAndRequestPermission({
+    BackgroundLocationConsent? backgroundConsent,
+  }) async {
     var permission = await _geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await _geolocator.requestPermission();
@@ -167,11 +203,13 @@ class LocationService {
       _backgroundGranted = false;
       return false;
     }
+    final background = _permissions[LocationPermissionKind.background]!;
     // Escalate to "Allow all the time" so updates keep coming with the screen
     // off. Best-effort: declining doesn't block recording, just makes
     // background tracking unreliable (and the user can be warned).
-    _backgroundGranted =
-        await _permissions[LocationPermissionKind.background]!.ensureGranted();
+    _backgroundGranted = backgroundConsent != null
+        ? await background.ensureGranted(consent: backgroundConsent)
+        : await background.isGranted();
     return true;
   }
 
@@ -184,12 +222,18 @@ class LocationService {
 
   /// [notification] supplies the localized title/body for the Android
   /// foreground-service notification. Required on Android; ignored elsewhere.
+  ///
+  /// [backgroundConsent] gates the background-location prompt; see
+  /// [checkAndRequestPermission]. Pass it when starting a walk so the prominent
+  /// disclosure is shown before "Allow all the time" is requested.
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
+    BackgroundLocationConsent? backgroundConsent,
   }) async {
     if (_running) return LocationServiceResult.running;
 
-    final granted = await checkAndRequestPermission();
+    final granted =
+        await checkAndRequestPermission(backgroundConsent: backgroundConsent);
     if (!granted) return LocationServiceResult.permissionDenied;
 
     // The foreground-service notification can't appear on Android 13+ without

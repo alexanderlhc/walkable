@@ -105,6 +105,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get locationPermissionDenied => 'Location permission denied';
 
   @override
+  String get locationDisclosureTitle => 'Allow background location';
+
+  @override
+  String get locationDisclosureBody => 'Walkable collects location data to record your walking route and show your live position on the map — including in the background, even when the app is closed or the screen is off. This keeps your walk recording while your phone is in your pocket. Your location is only used while a walk is running and never leaves your device.\n\nNext, Android will ask you to allow location access “All the time”.';
+
+  @override
+  String get locationDisclosureAccept => 'Continue';
+
+  @override
+  String get locationDisclosureDecline => 'Not now';
+
+  @override
   String get backgroundTrackingWarning => 'Notifications are off, so your walk may stop recording when the screen is locked.';
 
   @override

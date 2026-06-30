@@ -156,7 +156,10 @@ Future<void> _hold(WidgetTester tester, Duration d) async {
 
 class _GrantedPermission implements RuntimePermission {
   @override
-  Future<bool> ensureGranted() async => true;
+  Future<bool> isGranted() async => true;
+
+  @override
+  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async => true;
 }
 
 class _FakeGeolocator implements GeolocatorInterface {

@@ -72,6 +72,7 @@ class WalkRecorder {
 
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
+    BackgroundLocationConsent? backgroundConsent,
   }) async {
     if (_starting || _state != RecorderState.idle) {
       return LocationServiceResult.running;
@@ -79,7 +80,10 @@ class WalkRecorder {
     _starting = true;
     _notification = notification;
     try {
-      final result = await locationService.start(notification: notification);
+      final result = await locationService.start(
+        notification: notification,
+        backgroundConsent: backgroundConsent,
+      );
       if (result == LocationServiceResult.permissionDenied) {
         // Stay idle so the user can try again after granting permission.
         return LocationServiceResult.permissionDenied;

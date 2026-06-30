@@ -217,7 +217,10 @@ List<Coordinate> _loop({required double radiusMetres, required double phase}) {
 
 class _GrantedPermission implements RuntimePermission {
   @override
-  Future<bool> ensureGranted() async => true;
+  Future<bool> isGranted() async => true;
+
+  @override
+  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async => true;
 }
 
 class _FakeGeolocator implements GeolocatorInterface {

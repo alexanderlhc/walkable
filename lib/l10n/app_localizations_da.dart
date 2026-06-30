@@ -105,6 +105,18 @@ class AppLocalizationsDa extends AppLocalizations {
   String get locationPermissionDenied => 'Placeringstilladelse nægtet';
 
   @override
+  String get locationDisclosureTitle => 'Tillad placering i baggrunden';
+
+  @override
+  String get locationDisclosureBody => 'Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.';
+
+  @override
+  String get locationDisclosureAccept => 'Fortsæt';
+
+  @override
+  String get locationDisclosureDecline => 'Ikke nu';
+
+  @override
   String get backgroundTrackingWarning => 'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
 
   @override

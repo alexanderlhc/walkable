@@ -193,6 +193,35 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     }
   }
 
+  /// Google Play "Prominent Disclosure": before the OS "Allow all the time"
+  /// prompt, explain that Walkable collects location in the background — even
+  /// with the app closed or the screen off — and why, and require the user to
+  /// affirmatively accept. Returning `false` (declined or dismissed) skips the
+  /// background prompt; the walk still records while the app is in use.
+  Future<bool> _showBackgroundLocationDisclosure() async {
+    if (!mounted) return false;
+    final l10n = AppLocalizations.of(context)!;
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.locationDisclosureTitle),
+        content: Text(l10n.locationDisclosureBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.locationDisclosureDecline),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.locationDisclosureAccept),
+          ),
+        ],
+      ),
+    );
+    return accepted ?? false;
+  }
+
   Future<void> _onStart() async {
     final l10n = AppLocalizations.of(context)!;
     // Tear down the live-preview location stream before recording starts.
@@ -213,6 +242,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         title: l10n.notificationTitle,
         body: l10n.notificationText,
       ),
+      backgroundConsent: _showBackgroundLocationDisclosure,
     );
     if (!mounted) return;
     if (result == LocationServiceResult.permissionDenied) {

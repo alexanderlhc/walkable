@@ -25,6 +25,7 @@ class _StubLocationService extends LocationService {
   @override
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
+    BackgroundLocationConsent? backgroundConsent,
   }) async {
     startCalls++;
     final gate = startGate;

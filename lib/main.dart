@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -16,6 +17,11 @@ import 'package:walkable/walk_recorder.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Draw behind the system bars on every Android version. Android 15+ enforces
+  // edge-to-edge anyway, but enabling it here (not only natively) makes it
+  // consistent for users on Android 14 and below too — the gap behind Play
+  // Console's "edge-to-edge may not display for all users" advisory.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   if (defaultTargetPlatform == TargetPlatform.linux ||
       defaultTargetPlatform == TargetPlatform.windows ||
       defaultTargetPlatform == TargetPlatform.macOS) {

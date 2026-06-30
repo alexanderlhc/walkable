@@ -10,10 +10,23 @@ class FakeRuntimePermission implements RuntimePermission {
 
   bool granted;
   int ensureGrantedCalls = 0;
+  int isGrantedCalls = 0;
+  // Records the consent gate handed to the most recent ensureGranted call.
+  BackgroundLocationConsent? lastConsent;
 
   @override
-  Future<bool> ensureGranted() async {
+  Future<bool> isGranted() async {
+    isGrantedCalls++;
+    return granted;
+  }
+
+  @override
+  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async {
     ensureGrantedCalls++;
+    lastConsent = consent;
+    // Mirror the real gate: a declined disclosure skips the request and leaves
+    // the permission as-is.
+    if (consent != null && !await consent()) return granted;
     return granted;
   }
 }
@@ -256,15 +269,32 @@ void main() {
       verifyNever(() => mock.requestPermission());
     });
 
-    test('escalates to background location once foreground is granted',
-        () async {
+    test('escalates to background location through the consent gate', () async {
       when(() => mock.checkPermission())
           .thenAnswer((_) async => LocationPermission.whileInUse);
 
-      await service.checkAndRequestPermission();
+      await service.checkAndRequestPermission(
+        backgroundConsent: () async => true,
+      );
 
       expect(background.ensureGrantedCalls, 1);
+      expect(background.lastConsent, isNotNull);
       expect(service.backgroundGranted, isTrue);
+    });
+
+    test('never requests background location without a consent gate', () async {
+      // Foreground-only path (screen open / resume): the background prompt must
+      // not fire without the prominent disclosure. backgroundGranted just
+      // reflects whatever was already granted.
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      final granted = await service.checkAndRequestPermission();
+
+      expect(granted, isTrue);
+      expect(background.ensureGrantedCalls, 0);
+      expect(background.isGrantedCalls, 1);
+      expect(service.backgroundGranted, isTrue); // fake reports granted
     });
 
     test('backgroundGranted is false when "all the time" is declined',
@@ -273,7 +303,9 @@ void main() {
       when(() => mock.checkPermission())
           .thenAnswer((_) async => LocationPermission.whileInUse);
 
-      await service.checkAndRequestPermission();
+      await service.checkAndRequestPermission(
+        backgroundConsent: () async => true,
+      );
 
       expect(service.backgroundGranted, isFalse);
     });
@@ -283,7 +315,9 @@ void main() {
       when(() => mock.checkPermission())
           .thenAnswer((_) async => LocationPermission.deniedForever);
 
-      await service.checkAndRequestPermission();
+      await service.checkAndRequestPermission(
+        backgroundConsent: () async => true,
+      );
 
       expect(background.ensureGrantedCalls, 0);
       expect(service.backgroundGranted, isFalse);
