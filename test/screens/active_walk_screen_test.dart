@@ -160,6 +160,33 @@ void main() {
     expect(find.byKey(const Key('resume_button')), findsNothing);
   });
 
+  testWidgets(
+      'stops the live-preview location stream when recording starts',
+      (tester) async {
+    // geolocator caches its single position stream and ignores the
+    // locationSettings of any later getPositionStream() call while one is
+    // already active. The live-preview stream (plain settings, no foreground
+    // config) is started on screen open; if it stays subscribed when recording
+    // begins, recorder.start()'s foreground stream is silently shadowed — no
+    // notification and throttled GPS once the screen locks. So the preview must
+    // be torn down before recording starts.
+    final preview = StreamController<Position>.broadcast();
+    addTearDown(preview.close);
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => preview.stream);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+    expect(preview.hasListener, isTrue,
+        reason: 'preview stream should be live before recording');
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    expect(preview.hasListener, isFalse,
+        reason: 'preview stream must be cancelled when recording starts');
+  });
+
   testWidgets('warns with a recovery action when notifications are off',
       (tester) async {
     when(() => locationService.notificationsGranted).thenReturn(false);
@@ -318,6 +345,25 @@ void main() {
     verify(() => recorder.reset()).called(1);
     expect(find.byKey(const Key('start_button')), findsOneWidget);
     expect(find.byKey(const Key('stop_button')), findsNothing);
+  });
+
+  testWidgets('restarts the live preview after stopping', (tester) async {
+    // Recording cancels the preview stream; once the walk ends and we return to
+    // idle, the preview must be re-subscribed so the blue dot keeps following.
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('stop_button')));
+    await tester.pumpAndSettle();
+    when(() => recorder.state).thenReturn(RecorderState.idle);
+    await tester.tap(find.byKey(const Key('confirm_stop_button')));
+    await tester.pumpAndSettle();
+
+    // Once on screen open, once again after the walk ends.
+    verify(() => locationService.watchPosition()).called(2);
   });
 
   // ─── auto-centre on first fix ────────────────────────────────────────────────

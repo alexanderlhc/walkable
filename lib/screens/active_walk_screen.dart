@@ -112,6 +112,17 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       );
       return;
     }
+    _startLivePreview();
+  }
+
+  // Subscribes the pre-recording live-preview location stream that drives the
+  // blue dot (and one-shot auto-centre) while the walk hasn't started yet. Must
+  // not run concurrently with recording: geolocator keeps a single cached
+  // position stream, so a live preview would shadow the recorder's foreground
+  // stream (see [_onStart]). Cancels any existing preview first so it's safe to
+  // call again when returning to idle after a walk.
+  void _startLivePreview() {
+    _positionSub?.cancel();
     _positionSub =
         widget.recorder.locationService.watchPosition().listen((pos) {
       if (!mounted) return;
@@ -156,6 +167,19 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
 
   Future<void> _onStart() async {
     final l10n = AppLocalizations.of(context)!;
+    // Tear down the live-preview location stream before recording starts.
+    // geolocator keeps a single cached position stream and ignores the
+    // locationSettings of any later getPositionStream() call while one is
+    // active — so if the preview (plain settings) stays subscribed, the
+    // recorder's foreground stream is shadowed: no notification and GPS gets
+    // throttled once the screen locks. Cancelling synchronously clears
+    // geolocator's cached stream (its asBroadcastStream onCancel runs during
+    // cancel()), so the recorder's foreground stream is created fresh below.
+    // Not awaited: the cache-clearing is synchronous, and awaiting a cancel
+    // stalls under the widget-test fake clock. During recording the live dot is
+    // driven by the recorder's snapshots stream instead.
+    unawaited(_positionSub?.cancel());
+    _positionSub = null;
     final result = await widget.recorder.start(
       notification: ForegroundNotificationText(
         title: l10n.notificationTitle,
@@ -215,6 +239,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     widget.recorder.reset();
     if (!mounted) return;
     setState(() => _recorderState = RecorderState.idle);
+    // Recording tore down the live preview (see [_onStart]); restart it so the
+    // blue dot keeps following the user on the idle screen after the walk ends.
+    if (_locationPermissionGranted) _startLivePreview();
   }
 
   @override
