@@ -13,7 +13,6 @@ deps:
 
 # Build and launch the app. Optionally target a device:
 #   just run                 # auto-select a connected device
-#   just run linux           # desktop
 #   just run emulator-5554   # a running emulator by id
 run device="":
     {{flutter}} run {{ if device == "" { "" } else { "-d " + device } }}
