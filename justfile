@@ -69,3 +69,31 @@ walkthrough out="":
 # Remove build artifacts.
 clean:
     {{flutter}} clean
+
+# One-time setup for tag-triggered Play Store releases: upload the signing
+# keystore, key.properties and Play service-account JSON as GitHub Actions
+# secrets. Run on the machine that has them (needs `gh auth login`).
+#   just setup-release-secrets                          # defaults below
+#   just setup-release-secrets path/to/key.json
+setup-release-secrets play_json="play-store-key.json":
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    kp=android/key.properties
+    [ -f "$kp" ] || { echo "missing $kp"; exit 1; }
+
+    # Keystore path from key.properties; relative paths resolve against android/app.
+    ks=$(grep '^storeFile=' "$kp" | cut -d= -f2)
+    [ -f "$ks" ] || ks="android/app/$ks"
+    [ -f "$ks" ] || { echo "keystore not found: $ks"; exit 1; }
+
+    pj={{play_json}}
+    [ -f "$pj" ] || { echo "Play service-account JSON not found: $pj (Play Console → Setup → API access)"; exit 1; }
+
+    base64 -w0 "$ks" | gh secret set ANDROID_KEYSTORE_BASE64
+    # The release workflow decodes the keystore to android/app/upload-keystore.jks,
+    # so pin storeFile to that name regardless of the local path.
+    sed 's|^storeFile=.*|storeFile=upload-keystore.jks|' "$kp" | gh secret set ANDROID_KEY_PROPERTIES
+    gh secret set PLAY_STORE_JSON_KEY < "$pj"
+
+    gh secret list

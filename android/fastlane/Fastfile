@@ -2,11 +2,24 @@ default_platform(:android)
 
 platform :android do
   desc "Build Flutter AAB and upload to Play Store (default: internal track)"
+  desc "Version name comes from the git tag (v0.3.0 -> 0.3.0); version code is"
+  desc "the highest code on Play + 1, so nothing is ever committed for a release."
   lane :deploy do |options|
     track = options[:track] || "internal"
 
+    build_name = (ENV["GITHUB_REF_NAME"] || last_git_tag).to_s.sub(/^v/, "")
+    UI.user_error!("No git tag found to derive the version name from — tag the release like v0.3.0") if build_name.empty? || !build_name.match?(/^\d+\.\d+\.\d+/)
+
+    codes = %w[internal production].flat_map do |t|
+      google_play_track_version_codes(track: t)
+    rescue StandardError
+      []
+    end
+    build_number = (codes.max || 10) + 1
+    UI.message("Releasing #{build_name} (#{build_number}) to #{track}")
+
     Dir.chdir("../..") do
-      sh("flutter build appbundle --release")
+      sh("flutter build appbundle --release --build-name=#{build_name} --build-number=#{build_number}")
     end
 
     upload_to_play_store(
