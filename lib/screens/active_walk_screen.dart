@@ -17,10 +17,16 @@ class ActiveWalkScreen extends StatefulWidget {
   final WalkRecorder recorder;
   final WalkRepository repository;
 
+  /// How many orphaned walks startup crash recovery salvaged into the
+  /// history. When positive, the screen shows a one-time snackbar so the
+  /// user knows why an interrupted walk reappeared.
+  final int recoveredWalkCount;
+
   const ActiveWalkScreen({
     super.key,
     required this.recorder,
     required this.repository,
+    this.recoveredWalkCount = 0,
   });
 
   @override
@@ -97,6 +103,19 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       if (last != null) _maybeAutoCentre(LatLng(last.lat, last.lng));
     });
     _requestPermission();
+    // Announce startup crash recovery once, after the first frame so a
+    // ScaffoldMessenger (and localizations) are available.
+    if (widget.recoveredWalkCount > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!
+                .walksRecovered(widget.recoveredWalkCount)),
+          ),
+        );
+      });
+    }
   }
 
   Future<void> _requestPermission() async {

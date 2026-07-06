@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:walkable/location/location_service.dart';
@@ -60,46 +61,64 @@ class _FakeClock {
 /// operations, reproducing the persistence failures the recorder must
 /// survive. Methods are async so a failure surfaces as a rejected future —
 /// the shape of the original bug — rather than a synchronous throw.
+///
+/// The inner repository is optional: without one every operation is a no-op,
+/// which keeps the double usable inside fakeAsync where a real sqflite call
+/// (served from another isolate) would never complete.
 class _FlakyWalkRepository implements WalkRepository {
-  final WalkRepository _inner;
+  final WalkRepository? _inner;
 
-  _FlakyWalkRepository(this._inner);
+  _FlakyWalkRepository([this._inner]);
 
   bool failCreateWalk = false;
   bool failAppendCoordinate = false;
   bool failFinishWalk = false;
+  bool failUpdateProgress = false;
+
+  /// Every duration passed to [updateProgress], including rejected calls.
+  final List<Duration> updateProgressCalls = [];
 
   @override
   Future<void> createWalk(String id, DateTime startTime) async {
     if (failCreateWalk) throw StateError('createWalk rejected');
-    await _inner.createWalk(id, startTime);
+    await _inner?.createWalk(id, startTime);
   }
 
   @override
   Future<void> appendCoordinate(
       String walkId, Coordinate coord, int sequenceIndex) async {
     if (failAppendCoordinate) throw StateError('appendCoordinate rejected');
-    await _inner.appendCoordinate(walkId, coord, sequenceIndex);
+    await _inner?.appendCoordinate(walkId, coord, sequenceIndex);
   }
 
   @override
   Future<void> finishWalk(String walkId, DateTime endTime, Duration duration,
       double distanceMetres, List<Coord> route) async {
     if (failFinishWalk) throw StateError('finishWalk rejected');
-    await _inner.finishWalk(walkId, endTime, duration, distanceMetres, route);
+    await _inner?.finishWalk(walkId, endTime, duration, distanceMetres, route);
   }
 
   @override
-  Future<void> save(Walk walk) => _inner.save(walk);
+  Future<void> updateProgress(String id, Duration duration) async {
+    updateProgressCalls.add(duration);
+    if (failUpdateProgress) throw StateError('updateProgress rejected');
+    await _inner?.updateProgress(id, duration);
+  }
 
   @override
-  Future<Walk?> findById(String id) => _inner.findById(id);
+  Future<int> recoverOrphans() async => await _inner?.recoverOrphans() ?? 0;
 
   @override
-  Future<List<Walk>> findAll() => _inner.findAll();
+  Future<void> save(Walk walk) async => _inner?.save(walk);
 
   @override
-  Future<void> close() => _inner.close();
+  Future<Walk?> findById(String id) async => _inner?.findById(id);
+
+  @override
+  Future<List<Walk>> findAll() async => await _inner?.findAll() ?? const [];
+
+  @override
+  Future<void> close() async => _inner?.close();
 }
 
 Position _pos(double lat, double lng) => Position(
@@ -493,6 +512,100 @@ void main() {
       expect(walks.single.distanceMetres, greaterThan(0));
       final full = await repository.findById(walks.single.id);
       expect(full!.coordinates, isEmpty);
+    });
+  });
+
+  // The pause-aware duration exists only in the recorder's memory; these
+  // periodic writes are what crash recovery falls back on. See
+  // WalkRepository.recoverOrphans.
+  group('progress persistence', () {
+    test('ticker writes progress once per 30 s of recording, not per tick',
+        () {
+      fakeAsync((async) {
+        // Rebuilt inside the fakeAsync zone (the ticker must be created
+        // here), and with no inner repository: a real sqflite call is served
+        // from another isolate and would never complete under fakeAsync.
+        final location = _StubLocationService();
+        final clock = _FakeClock();
+        final flaky = _FlakyWalkRepository();
+        final recorder = WalkRecorder(
+          locationService: location,
+          repository: flaky,
+          now: clock.now,
+        );
+        recorder.start();
+        async.flushMicrotasks();
+        expect(recorder.state, RecorderState.recording);
+
+        // Drive the fake clock and the ticker in lockstep, one tick at a
+        // time, like the real 1-second ticker experiences time.
+        void record(Duration d) {
+          for (var i = 0; i < d.inSeconds; i++) {
+            clock.advance(const Duration(seconds: 1));
+            async.elapse(const Duration(seconds: 1));
+          }
+          async.flushMicrotasks();
+        }
+
+        // 29 ticks: below the throttle interval, nothing written yet.
+        record(const Duration(seconds: 29));
+        expect(flaky.updateProgressCalls, isEmpty);
+
+        // The 30th tick crosses the interval: exactly one write, carrying
+        // the pause-aware duration at that moment.
+        record(const Duration(seconds: 1));
+        expect(flaky.updateProgressCalls, [const Duration(seconds: 30)]);
+
+        // Another full minute: one write per further 30 s — 60 more ticks
+        // yield exactly two more writes, not sixty.
+        record(const Duration(minutes: 1));
+        expect(flaky.updateProgressCalls, [
+          const Duration(seconds: 30),
+          const Duration(seconds: 60),
+          const Duration(seconds: 90),
+        ]);
+
+        recorder.dispose();
+        location.dispose();
+        async.flushMicrotasks();
+      });
+    });
+
+    test('pause writes the accumulated duration', () async {
+      await recorder.start();
+      clock.advance(const Duration(seconds: 42));
+
+      await recorder.pause();
+      // Let the serialized persistence chain run the write.
+      await Future<void>.delayed(Duration.zero);
+
+      expect(flaky.updateProgressCalls, [const Duration(seconds: 42)]);
+    });
+
+    test('recording survives updateProgress failures', () async {
+      flaky.failUpdateProgress = true;
+
+      await recorder.start();
+      location.emit(_pos(55.676, 12.568));
+      await Future<void>.delayed(Duration.zero);
+
+      clock.advance(const Duration(seconds: 42));
+      await recorder.pause(); // triggers a progress write that rejects
+      await Future<void>.delayed(Duration.zero); // let the chained write run
+      expect(recorder.state, RecorderState.paused);
+      expect(flaky.updateProgressCalls, hasLength(1));
+
+      // The walk continues and still finishes normally afterwards.
+      await recorder.resume();
+      location.emit(_pos(55.677, 12.569));
+      await Future<void>.delayed(Duration.zero);
+      await recorder.stop();
+
+      final walks = await repository.findAll();
+      expect(walks.length, 1);
+      expect(walks.single.duration, const Duration(seconds: 42));
+      final full = await repository.findById(walks.single.id);
+      expect(full!.coordinates.length, 2);
     });
   });
 
