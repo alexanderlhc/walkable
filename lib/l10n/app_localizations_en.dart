@@ -84,6 +84,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get navMenu => 'Menu';
 
   @override
+  String get settingsTheme => 'Theme';
+
+  @override
+  String get themeLight => 'Light';
+
+  @override
+  String get themeDark => 'Dark';
+
+  @override
   String get locationPermissionDenied => 'Location permission denied';
 
   @override

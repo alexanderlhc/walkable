@@ -74,7 +74,8 @@ class WalkableApp extends StatelessWidget {
         onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
         theme: buildAppTheme(Brightness.light),
         darkTheme: buildAppTheme(Brightness.dark),
-        themeMode: ThemeMode.system,
+        // User theme override; ThemeMode.system follows the device.
+        themeMode: settingsController.themeMode,
         // Null (no override) falls through to the device locale via the
         // resolution callback below.
         locale: settingsController.localeOverride,
