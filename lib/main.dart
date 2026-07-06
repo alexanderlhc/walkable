@@ -53,36 +53,43 @@ class WalkableApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
-      theme: buildAppTheme(Brightness.light),
-      darkTheme: buildAppTheme(Brightness.dark),
-      themeMode: ThemeMode.system,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      // Match the device language; fall back to English for anything we don't
-      // translate (rather than the first supported locale, which is Danish).
-      localeResolutionCallback: (deviceLocale, supportedLocales) {
-        for (final locale in supportedLocales) {
-          if (locale.languageCode == deviceLocale?.languageCode) {
-            return locale;
+    return ListenableBuilder(
+      listenable: settingsController,
+      builder: (context, _) => MaterialApp(
+        onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
+        theme: buildAppTheme(Brightness.light),
+        darkTheme: buildAppTheme(Brightness.dark),
+        themeMode: ThemeMode.system,
+        // Null (no override) falls through to the device locale via the
+        // resolution callback below.
+        locale: settingsController.localeOverride,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        // Match the device language; fall back to English for anything we
+        // don't translate (rather than the first supported locale, which is
+        // Danish).
+        localeResolutionCallback: (deviceLocale, supportedLocales) {
+          for (final locale in supportedLocales) {
+            if (locale.languageCode == deviceLocale?.languageCode) {
+              return locale;
+            }
           }
-        }
-        return const Locale('en');
-      },
-      onGenerateRoute: (settings) {
-        if (settings.name == '/walk-detail') {
-          final walk = settings.arguments as Walk;
-          return MaterialPageRoute(
-            builder: (_) => WalkDetailScreen(walk: walk),
-          );
-        }
-        return null;
-      },
-      home: ActiveWalkScreen(
-        recorder: recorder,
-        repository: repository,
-        settingsController: settingsController,
+          return const Locale('en');
+        },
+        onGenerateRoute: (settings) {
+          if (settings.name == '/walk-detail') {
+            final walk = settings.arguments as Walk;
+            return MaterialPageRoute(
+              builder: (_) => WalkDetailScreen(walk: walk),
+            );
+          }
+          return null;
+        },
+        home: ActiveWalkScreen(
+          recorder: recorder,
+          repository: repository,
+          settingsController: settingsController,
+        ),
       ),
     );
   }
