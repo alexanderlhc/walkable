@@ -1,8 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Persists user settings. One key per setting; absence means "default".
 class SettingsRepository {
   static const _localeKey = 'locale_override';
+  static const _themeKey = 'theme_mode';
 
   final SharedPreferences _prefs;
 
@@ -16,6 +18,30 @@ class SettingsRepository {
       await _prefs.remove(_localeKey);
     } else {
       await _prefs.setString(_localeKey, code);
+    }
+  }
+
+  /// The persisted theme override. Absent, unknown, or corrupt data all mean
+  /// "follow the system" — this never throws.
+  ThemeMode readThemeMode() {
+    String? name;
+    try {
+      name = _prefs.getString(_themeKey);
+    } catch (_) {
+      return ThemeMode.system; // corrupt/typed data -> follow system
+    }
+    return switch (name) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  Future<void> writeThemeMode(ThemeMode mode) async {
+    if (mode == ThemeMode.system) {
+      await _prefs.remove(_themeKey);
+    } else {
+      await _prefs.setString(_themeKey, mode.name);
     }
   }
 }

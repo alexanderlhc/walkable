@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/repository/settings_repository.dart';
 
@@ -7,10 +7,13 @@ class SettingsController extends ChangeNotifier {
   final SettingsRepository repository;
 
   Locale? _localeOverride;
+  ThemeMode _themeMode = ThemeMode.system;
 
   SettingsController(this.repository);
 
   Locale? get localeOverride => _localeOverride;
+
+  ThemeMode get themeMode => _themeMode;
 
   /// Restores the persisted override. A code we no longer support (or
   /// corrupt data) degrades to following the system rather than crashing.
@@ -18,6 +21,7 @@ class SettingsController extends ChangeNotifier {
   /// Deliberately doesn't notify: this must run before the first build
   /// (main() calls it before runApp), so there are no listeners yet.
   void load() {
+    _themeMode = repository.readThemeMode();
     String? code;
     try {
       code = repository.readLocaleCode();
@@ -35,6 +39,17 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
     try {
       await repository.writeLocaleCode(locale?.languageCode);
+    } catch (_) {
+      // The choice still applies this session; it just won't survive a
+      // restart.
+    }
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    _themeMode = mode;
+    notifyListeners();
+    try {
+      await repository.writeThemeMode(mode);
     } catch (_) {
       // The choice still applies this session; it just won't survive a
       // restart.
