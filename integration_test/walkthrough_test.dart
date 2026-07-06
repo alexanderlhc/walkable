@@ -27,9 +27,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/main.dart';
+import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/walk_recorder.dart';
 
 // Universitetsparken, Aarhus — a large, recognisable green park, so the live
@@ -77,9 +80,17 @@ void main() {
       },
     );
     final recorder = WalkRecorder(locationService: location, repository: repo);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
 
     await tester.pumpWidget(
-      WalkableApp(recorder: recorder, repository: repo),
+      WalkableApp(
+        recorder: recorder,
+        repository: repo,
+        settingsController: settingsController,
+      ),
     );
 
     // Let the home screen request permission and subscribe to the position

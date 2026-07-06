@@ -1,13 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
 import 'package:walkable/screens/walk_detail_screen.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/theme.dart';
 import 'package:walkable/walk_recorder.dart';
 
@@ -26,17 +29,26 @@ void main() async {
     locationService: locationService,
     repository: repository,
   );
-  runApp(WalkableApp(recorder: recorder, repository: repository));
+  final prefs = await SharedPreferences.getInstance();
+  final settingsController = SettingsController(SettingsRepository(prefs))
+    ..load();
+  runApp(WalkableApp(
+    recorder: recorder,
+    repository: repository,
+    settingsController: settingsController,
+  ));
 }
 
 class WalkableApp extends StatelessWidget {
   final WalkRecorder recorder;
   final WalkRepository repository;
+  final SettingsController settingsController;
 
   const WalkableApp({
     super.key,
     required this.recorder,
     required this.repository,
+    required this.settingsController,
   });
 
   @override
@@ -67,7 +79,11 @@ class WalkableApp extends StatelessWidget {
         }
         return null;
       },
-      home: ActiveWalkScreen(recorder: recorder, repository: repository),
+      home: ActiveWalkScreen(
+        recorder: recorder,
+        repository: repository,
+        settingsController: settingsController,
+      ),
     );
   }
 }

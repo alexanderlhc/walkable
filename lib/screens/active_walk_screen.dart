@@ -8,7 +8,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/repository/walk_repository.dart';
+import 'package:walkable/screens/settings_screen.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/theme.dart';
 import 'package:walkable/walk_recorder.dart';
 import 'package:walkable/walk_stats.dart';
@@ -16,11 +18,13 @@ import 'package:walkable/walk_stats.dart';
 class ActiveWalkScreen extends StatefulWidget {
   final WalkRecorder recorder;
   final WalkRepository repository;
+  final SettingsController settingsController;
 
   const ActiveWalkScreen({
     super.key,
     required this.recorder,
     required this.repository,
+    required this.settingsController,
   });
 
   @override
@@ -317,20 +321,43 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
               }
             },
           ),
-          // History pill — top left
+          // Menu pill — top left. History and Settings live in here so the
+          // map stays as empty as possible.
           Positioned(
             top: topPadding,
             left: 12,
-            child: _MapChip(
-              key: const Key('history_button'),
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      WalkHistoryScreen(repository: widget.repository),
-                ),
+            child: MenuAnchor(
+              builder: (context, menu, _) => _MapChip(
+                key: const Key('menu_button'),
+                onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+                semanticLabel: l10n.navMenu,
+                icon: const Icon(Icons.menu, size: 18),
               ),
-              icon: const Icon(Icons.history, size: 18),
-              label: Text(l10n.navHistory),
+              menuChildren: [
+                MenuItemButton(
+                  key: const Key('history_button'),
+                  leadingIcon: const Icon(Icons.history),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          WalkHistoryScreen(repository: widget.repository),
+                    ),
+                  ),
+                  child: Text(l10n.navHistory),
+                ),
+                MenuItemButton(
+                  key: const Key('settings_button'),
+                  leadingIcon: const Icon(Icons.settings),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SettingsScreen(
+                        controller: widget.settingsController,
+                      ),
+                    ),
+                  ),
+                  child: Text(l10n.screenSettings),
+                ),
+              ],
             ),
           ),
           // Re-centre — top right, only when dot is off-screen
@@ -700,17 +727,15 @@ class _StatBlock extends StatelessWidget {
 class _MapChip extends StatelessWidget {
   final VoidCallback? onPressed;
   final Widget icon;
-  final Widget? label;
 
-  /// Spoken label for icon-only chips (those with no [label] text). A chip
-  /// with a text label already reads it, so this can be left null there.
+  /// Spoken label — both remaining chips are icon-only now that History
+  /// moved into the menu, so this is always supplied.
   final String? semanticLabel;
 
   const _MapChip({
     super.key,
     required this.onPressed,
     required this.icon,
-    this.label,
     this.semanticLabel,
   });
 
@@ -728,8 +753,8 @@ class _MapChip extends StatelessWidget {
           onTap: onPressed,
           borderRadius: BorderRadius.circular(24),
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: label != null ? 12 : 10,
+            padding: const EdgeInsets.symmetric(
+              horizontal: 10,
               vertical: 10,
             ),
             child: Row(
@@ -742,15 +767,6 @@ class _MapChip extends StatelessWidget {
                   ),
                   child: icon,
                 ),
-                if (label != null) ...[
-                  const SizedBox(width: 6),
-                  DefaultTextStyle(
-                    style: Theme.of(context).textTheme.labelLarge!.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                    child: label!,
-                  ),
-                ],
               ],
             ),
           ),

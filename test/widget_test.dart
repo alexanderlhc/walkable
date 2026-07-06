@@ -3,9 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/main.dart';
+import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/walk_recorder.dart';
 
 class MockWalkRecorder extends Mock implements WalkRecorder {}
@@ -29,20 +32,22 @@ void main() {
     when(() => locationService.watchPosition())
         .thenAnswer((_) => const Stream.empty());
 
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
+
     await tester.pumpWidget(
-      WalkableApp(recorder: recorder, repository: repository),
+      WalkableApp(
+        recorder: recorder,
+        repository: repository,
+        settingsController: settingsController,
+      ),
     );
     await tester.pumpAndSettle();
 
-    // App title appears via localisation in the history chip
-    expect(
-      find.byWidgetPredicate((w) =>
-          w is Text &&
-          (w.data?.contains(
-                  RegExp(r'History|Historik', caseSensitive: false)) ??
-              false)),
-      findsOneWidget,
-    );
+    // Menu chip is the single top-left entry point
+    expect(find.byKey(const Key('menu_button')), findsOneWidget);
     // Start button is present
     expect(find.byKey(const Key('start_button')), findsOneWidget);
 
