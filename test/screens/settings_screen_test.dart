@@ -27,7 +27,7 @@ void main() {
     await tester.pumpWidget(buildSubject());
 
     expect(find.text('Language'), findsOneWidget);
-    expect(find.text('System default'), findsOneWidget);
+    expect(find.text('System default'), findsNWidgets(2)); // language + theme
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Dansk'), findsOneWidget);
   });
@@ -97,6 +97,69 @@ void main() {
 
     expect(find.text('Indstillinger'), findsOneWidget);
     expect(find.text('Sprog'), findsOneWidget);
-    expect(find.text('Systemstandard'), findsOneWidget);
+    expect(find.text('Systemstandard'), findsNWidgets(2)); // language + theme
+  });
+
+  testWidgets('shows theme section with the three options', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    expect(find.text('Theme'), findsOneWidget);
+    expect(find.text('Light'), findsOneWidget);
+    expect(find.text('Dark'), findsOneWidget);
+  });
+
+  testWidgets('system theme is selected when there is no override',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    final group = tester
+        .widget<RadioGroup<ThemeMode>>(find.byType(RadioGroup<ThemeMode>));
+    expect(group.groupValue, ThemeMode.system);
+  });
+
+  testWidgets('persisted theme override is the selected radio',
+      (tester) async {
+    await setUpController({'theme_mode': 'dark'});
+    await tester.pumpWidget(buildSubject());
+
+    final group = tester
+        .widget<RadioGroup<ThemeMode>>(find.byType(RadioGroup<ThemeMode>));
+    expect(group.groupValue, ThemeMode.dark);
+  });
+
+  testWidgets('tapping Dark updates the controller and persists',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.tap(find.byKey(const Key('theme_dark')));
+    await tester.pumpAndSettle();
+
+    expect(controller.themeMode, ThemeMode.dark);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('theme_mode'), 'dark');
+  });
+
+  testWidgets('tapping System default clears the theme override',
+      (tester) async {
+    await setUpController({'theme_mode': 'dark'});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.tap(find.byKey(const Key('theme_system')));
+    await tester.pumpAndSettle();
+
+    expect(controller.themeMode, ThemeMode.system);
+  });
+
+  testWidgets('renders Danish theme strings under the Danish locale',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+
+    expect(find.text('Tema'), findsOneWidget);
+    expect(find.text('Lyst'), findsOneWidget);
+    expect(find.text('Mørkt'), findsOneWidget);
   });
 }

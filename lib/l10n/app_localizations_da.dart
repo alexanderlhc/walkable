@@ -84,6 +84,15 @@ class AppLocalizationsDa extends AppLocalizations {
   String get navMenu => 'Menu';
 
   @override
+  String get settingsTheme => 'Tema';
+
+  @override
+  String get themeLight => 'Lyst';
+
+  @override
+  String get themeDark => 'Mørkt';
+
+  @override
   String get locationPermissionDenied => 'Placeringstilladelse nægtet';
 
   @override
