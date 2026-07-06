@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/walk_calculator.dart' as calc;
 
 class WalkRepository {
   final Database _db;
@@ -9,7 +10,7 @@ class WalkRepository {
   static Future<WalkRepository> inMemory() async {
     final db = await openDatabase(
       ':memory:',
-      version: 2,
+      version: 3,
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
     );
@@ -19,7 +20,7 @@ class WalkRepository {
   static Future<WalkRepository> open(String path) async {
     final db = await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
     );
@@ -32,6 +33,32 @@ class WalkRepository {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE walks ADD COLUMN duration_ms INTEGER');
     }
+    // v3 adds the persisted route distance (metres), so list queries don't
+    // have to hydrate every coordinate. Backfill existing walks from their
+    // stored coordinates.
+    if (oldVersion < 3) {
+      await db.execute('ALTER TABLE walks ADD COLUMN distance REAL');
+      final walkRows = await db.query('walks', columns: ['id']);
+      for (final row in walkRows) {
+        final walkId = row['id'] as String;
+        final coordRows = await db.query(
+          'coordinates',
+          columns: ['lat', 'lng'],
+          where: 'walk_id = ?',
+          whereArgs: [walkId],
+          orderBy: 'sequence_index ASC',
+        );
+        final coords = coordRows
+            .map((c) => (lat: c['lat'] as double, lng: c['lng'] as double))
+            .toList();
+        await db.update(
+          'walks',
+          {'distance': calc.totalDistance(coords)},
+          where: 'id = ?',
+          whereArgs: [walkId],
+        );
+      }
+    }
   }
 
   static Future<void> _createSchema(Database db, int version) async {
@@ -40,7 +67,8 @@ class WalkRepository {
         id TEXT PRIMARY KEY,
         start_time INTEGER NOT NULL,
         end_time INTEGER,
-        duration_ms INTEGER
+        duration_ms INTEGER,
+        distance REAL
       )
     ''');
     await db.execute('''
@@ -84,15 +112,17 @@ class WalkRepository {
     });
   }
 
-  /// Marks a walk finished by recording its end time and the pause-aware
-  /// moving [duration] accumulated during recording.
-  Future<void> finishWalk(
-      String walkId, DateTime endTime, Duration duration) async {
+  /// Marks a walk finished by recording its end time, the pause-aware moving
+  /// [duration] accumulated during recording, and the total route
+  /// [distanceMetres], persisted so list queries never need the coordinates.
+  Future<void> finishWalk(String walkId, DateTime endTime, Duration duration,
+      double distanceMetres) async {
     await _db.update(
       'walks',
       {
         'end_time': endTime.millisecondsSinceEpoch,
         'duration_ms': duration.inMilliseconds,
+        'distance': distanceMetres,
       },
       where: 'id = ?',
       whereArgs: [walkId],
@@ -108,6 +138,10 @@ class WalkRepository {
           'start_time': walk.startTime.millisecondsSinceEpoch,
           'end_time': walk.endTime?.millisecondsSinceEpoch,
           'duration_ms': walk.duration?.inMilliseconds,
+          'distance': walk.distanceMetres ??
+              calc.totalDistance(
+                walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList(),
+              ),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -139,12 +173,17 @@ class WalkRepository {
     return _hydrate(walkRows.first);
   }
 
+  /// Returns all *finished* walks, newest first, for the history list. Walks
+  /// still being recorded (or orphaned by a kill) have no end time and are
+  /// excluded. Coordinates are deliberately not hydrated — the list reads the
+  /// persisted distance instead; use [findById] for the full route.
   Future<List<Walk>> findAll() async {
     final walkRows = await _db.query(
       'walks',
+      where: 'end_time IS NOT NULL',
       orderBy: 'start_time DESC',
     );
-    return Future.wait(walkRows.map(_hydrate));
+    return walkRows.map(_walkFromRow).toList();
   }
 
   Future<Walk> _hydrate(Map<String, dynamic> row) async {
@@ -165,16 +204,22 @@ class WalkRepository {
             ))
         .toList();
 
+    return _walkFromRow(row, coordinates: coordinates);
+  }
+
+  Walk _walkFromRow(Map<String, dynamic> row,
+      {List<Coordinate> coordinates = const []}) {
     final endTimeMs = row['end_time'] as int?;
     final durationMs = row['duration_ms'] as int?;
 
     return Walk(
-      id: walkId,
+      id: row['id'] as String,
       startTime: DateTime.fromMillisecondsSinceEpoch(row['start_time'] as int),
       endTime: endTimeMs != null
           ? DateTime.fromMillisecondsSinceEpoch(endTimeMs)
           : null,
       duration: durationMs != null ? Duration(milliseconds: durationMs) : null,
+      distanceMetres: (row['distance'] as num?)?.toDouble(),
       coordinates: coordinates,
     );
   }

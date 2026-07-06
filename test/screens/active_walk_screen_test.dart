@@ -160,8 +160,7 @@ void main() {
     expect(find.byKey(const Key('resume_button')), findsNothing);
   });
 
-  testWidgets(
-      'stops the live-preview location stream when recording starts',
+  testWidgets('stops the live-preview location stream when recording starts',
       (tester) async {
     // geolocator caches its single position stream and ignores the
     // locationSettings of any later getPositionStream() call while one is
@@ -440,7 +439,8 @@ void main() {
     controller.move(const LatLng(48.8566, 2.3522), controller.camera.zoom);
     await tester.pumpAndSettle();
 
-    positions.add(pos(34.0522, -118.2437)); // second fix → must NOT hijack camera
+    positions
+        .add(pos(34.0522, -118.2437)); // second fix → must NOT hijack camera
     await tester.pumpAndSettle();
 
     final camera = cameraControllerOf(tester).camera;

@@ -114,9 +114,12 @@ class WalkRecorder {
     _snapshots.add(_buildSnapshot(endTime));
 
     // Drain pending coordinate writes, then mark the walk finished with the
-    // canonical pause-aware moving time.
+    // canonical pause-aware moving time and the total route distance (stored
+    // so the history list never has to reload the coordinates).
     await _persist;
-    await _repository.finishWalk(_id!, endTime, _elapsedAt(endTime));
+    final distance = totalDistance(
+        _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList());
+    await _repository.finishWalk(_id!, endTime, _elapsedAt(endTime), distance);
   }
 
   void reset() {

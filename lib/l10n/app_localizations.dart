@@ -194,6 +194,18 @@ abstract class AppLocalizations {
   /// **'No walks yet'**
   String get historyEmpty;
 
+  /// No description provided for @historyLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your walks'**
+  String get historyLoadError;
+
+  /// No description provided for @actionRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get actionRetry;
+
   /// No description provided for @screenWalkDetail.
   ///
   /// In en, this message translates to:

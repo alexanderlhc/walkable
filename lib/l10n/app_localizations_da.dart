@@ -57,6 +57,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get historyEmpty => 'Ingen gåture endnu';
 
   @override
+  String get historyLoadError => 'Kunne ikke indlæse dine gåture';
+
+  @override
+  String get actionRetry => 'Prøv igen';
+
+  @override
   String get screenWalkDetail => 'Gåtur';
 
   @override
