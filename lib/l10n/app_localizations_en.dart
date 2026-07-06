@@ -66,15 +66,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get screenWalkDetail => 'Walk Detail';
 
   @override
+  String get screenSettings => 'Settings';
+
+  @override
+  String get settingsLanguage => 'Language';
+
+  @override
+  String get settingsSystemDefault => 'System default';
+
+  @override
+  String get languageEnglish => 'English';
+
+  @override
+  String get languageDanish => 'Dansk';
+
+  @override
+  String get navMenu => 'Menu';
+
+  @override
   String get locationPermissionDenied => 'Location permission denied';
 
   @override
-  String get backgroundTrackingWarning =>
-      'Notifications are off, so your walk may stop recording when the screen is locked.';
+  String get backgroundTrackingWarning => 'Notifications are off, so your walk may stop recording when the screen is locked.';
 
   @override
-  String get batteryOptimizationWarning =>
-      'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
+  String get batteryOptimizationWarning => 'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
 
   @override
   String get openSettings => 'Settings';

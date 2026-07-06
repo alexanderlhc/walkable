@@ -66,15 +66,31 @@ class AppLocalizationsDa extends AppLocalizations {
   String get screenWalkDetail => 'Gåtur';
 
   @override
+  String get screenSettings => 'Indstillinger';
+
+  @override
+  String get settingsLanguage => 'Sprog';
+
+  @override
+  String get settingsSystemDefault => 'Systemstandard';
+
+  @override
+  String get languageEnglish => 'English';
+
+  @override
+  String get languageDanish => 'Dansk';
+
+  @override
+  String get navMenu => 'Menu';
+
+  @override
   String get locationPermissionDenied => 'Placeringstilladelse nægtet';
 
   @override
-  String get backgroundTrackingWarning =>
-      'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
+  String get backgroundTrackingWarning => 'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
 
   @override
-  String get batteryOptimizationWarning =>
-      'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
+  String get batteryOptimizationWarning => 'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
 
   @override
   String get openSettings => 'Indstillinger';
