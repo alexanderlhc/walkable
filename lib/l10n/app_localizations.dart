@@ -334,6 +334,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{value} km'**
   String unitKm(String value);
+
+  /// No description provided for @unitMi.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} mi'**
+  String unitMi(String value);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

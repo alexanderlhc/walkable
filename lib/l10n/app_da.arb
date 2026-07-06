@@ -39,5 +39,6 @@
   "walksRecovered": "{count, plural, =1{En afbrudt gåtur blev gendannet til din historik} other{{count} afbrudte gåture blev gendannet til din historik}}",
   "notificationTitle": "Gåtur i gang",
   "notificationText": "Walkable registrerer din gåtur",
-  "unitKm": "{value} km"
+  "unitKm": "{value} km",
+  "unitMi": "{value} mi"
 }

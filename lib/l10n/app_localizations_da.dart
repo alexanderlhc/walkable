@@ -139,4 +139,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String unitKm(String value) {
     return '$value km';
   }
+
+  @override
+  String unitMi(String value) {
+    return '$value mi';
+  }
 }

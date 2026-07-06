@@ -285,6 +285,8 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     final l10n = AppLocalizations.of(context)!;
     final points =
         _snapshot?.polyline.map((c) => LatLng(c.lat, c.lng)).toList() ?? [];
+    final units = widget.settingsController.unitsOverride ??
+        unitSystemForLocale(WidgetsBinding.instance.platformDispatcher.locale);
 
     final topPadding = MediaQuery.of(context).padding.top + 12;
 
@@ -331,6 +333,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
           _BottomPanel(
             state: _recorderState,
             snapshot: _snapshot,
+            units: units,
             onStart: _onStart,
             onPause: _onPause,
             onResume: _onResume,
@@ -359,8 +362,10 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                   leadingIcon: const Icon(Icons.history),
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          WalkHistoryScreen(repository: widget.repository),
+                      builder: (_) => WalkHistoryScreen(
+                        repository: widget.repository,
+                        settingsController: widget.settingsController,
+                      ),
                     ),
                   ),
                   child: Text(l10n.navHistory),
@@ -411,6 +416,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
 class _BottomPanel extends StatefulWidget {
   final RecorderState state;
   final WalkSnapshot? snapshot;
+  final UnitSystem units;
   final VoidCallback onStart;
   final VoidCallback onPause;
   final VoidCallback onResume;
@@ -422,6 +428,7 @@ class _BottomPanel extends StatefulWidget {
   const _BottomPanel({
     required this.state,
     required this.snapshot,
+    required this.units,
     required this.onStart,
     required this.onPause,
     required this.onResume,
@@ -562,8 +569,8 @@ class _BottomPanelState extends State<_BottomPanel> {
             children: [
               _StatBlock(
                 label: l10n.statDistance,
-                value: stats.formattedDistance(UnitSystem.metric),
-                unit: 'km',
+                value: stats.formattedDistance(widget.units),
+                unit: widget.units == UnitSystem.metric ? 'km' : 'mi',
               ),
               VerticalDivider(color: cs.outlineVariant, width: 1),
               _StatBlock(
@@ -575,8 +582,11 @@ class _BottomPanelState extends State<_BottomPanel> {
               VerticalDivider(color: cs.outlineVariant, width: 1),
               _StatBlock(
                 label: l10n.statPace,
-                value: stats.formattedPace(UnitSystem.metric, fallback: l10n.paceUnavailable),
-                unit: stats.paceMinPerKm.isFinite ? '/km' : null,
+                value: stats.formattedPace(widget.units,
+                    fallback: l10n.paceUnavailable),
+                unit: stats.paceMinPerKm.isFinite
+                    ? (widget.units == UnitSystem.metric ? '/km' : '/mi')
+                    : null,
               ),
             ],
           ),

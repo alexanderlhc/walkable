@@ -54,5 +54,11 @@
     "placeholders": {
       "value": { "type": "String" }
     }
+  },
+  "unitMi": "{value} mi",
+  "@unitMi": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
   }
 }

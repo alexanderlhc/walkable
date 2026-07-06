@@ -96,7 +96,10 @@ class WalkableApp extends StatelessWidget {
           if (settings.name == '/walk-detail') {
             final walk = settings.arguments as Walk;
             return MaterialPageRoute(
-              builder: (_) => WalkDetailScreen(walk: walk),
+              builder: (_) => WalkDetailScreen(
+                walk: walk,
+                settingsController: settingsController,
+              ),
             );
           }
           return null;

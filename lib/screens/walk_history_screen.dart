@@ -5,14 +5,20 @@ import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/theme.dart';
 import 'package:walkable/units.dart';
 import 'package:walkable/walk_stats.dart';
 
 class WalkHistoryScreen extends StatefulWidget {
   final WalkRepository repository;
+  final SettingsController settingsController;
 
-  const WalkHistoryScreen({super.key, required this.repository});
+  const WalkHistoryScreen({
+    super.key,
+    required this.repository,
+    required this.settingsController,
+  });
 
   @override
   State<WalkHistoryScreen> createState() => _WalkHistoryScreenState();
@@ -45,6 +51,8 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final units = widget.settingsController.unitsOverride ??
+        unitSystemForLocale(WidgetsBinding.instance.platformDispatcher.locale);
     return Scaffold(
       appBar: AppBar(title: Text(l10n.navHistory)),
       body: FutureBuilder<List<Walk>>(
@@ -80,6 +88,7 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
               final walk = walks[index];
               return _WalkCard(
                 walk: walk,
+                units: units,
                 onTap: () => _openDetail(walk),
               );
             },
@@ -95,9 +104,11 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
 /// date and the headline stats (distance, duration, pace) beneath it.
 class _WalkCard extends StatelessWidget {
   final Walk walk;
+  final UnitSystem units;
   final VoidCallback onTap;
 
-  const _WalkCard({required this.walk, required this.onTap});
+  const _WalkCard(
+      {required this.walk, required this.units, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -147,7 +158,9 @@ class _WalkCard extends StatelessWidget {
               child: Row(
                 children: [
                   _Stat(
-                    value: l10n.unitKm(stats.formattedDistance(UnitSystem.metric)),
+                    value: units == UnitSystem.metric
+                        ? l10n.unitKm(stats.formattedDistance(units))
+                        : l10n.unitMi(stats.formattedDistance(units)),
                     label: l10n.statDistance,
                     emphasized: true,
                   ),
@@ -159,7 +172,8 @@ class _WalkCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 28),
                   _Stat(
-                    value: stats.formattedPace(UnitSystem.metric, fallback: l10n.paceUnavailable),
+                    value: stats.formattedPace(units,
+                        fallback: l10n.paceUnavailable),
                     label: l10n.statPace,
                   ),
                   const Spacer(),

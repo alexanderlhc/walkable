@@ -3,33 +3,47 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
+import 'package:walkable/settings_controller.dart';
 
 class MockWalkRepository extends Mock implements WalkRepository {}
 
 void main() {
   late MockWalkRepository mockRepository;
+  late SettingsController settingsController;
+  late Map<String, Object> prefsValues;
 
   setUp(() {
     mockRepository = MockWalkRepository();
+    prefsValues = {};
   });
 
-  Widget buildSubject() => MaterialApp(
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        routes: {
-          '/walk-detail': (_) => const Scaffold(body: Text('Walk Detail')),
-        },
-        home: WalkHistoryScreen(repository: mockRepository),
-      );
+  Future<Widget> buildSubject() async {
+    SharedPreferences.setMockInitialValues(prefsValues);
+    final prefs = await SharedPreferences.getInstance();
+    settingsController = SettingsController(SettingsRepository(prefs))..load();
+    return MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      routes: {
+        '/walk-detail': (_) => const Scaffold(body: Text('Walk Detail')),
+      },
+      home: WalkHistoryScreen(
+        repository: mockRepository,
+        settingsController: settingsController,
+      ),
+    );
+  }
 
   testWidgets('shows empty state when no walks exist', (tester) async {
     when(() => mockRepository.findAll()).thenAnswer((_) async => []);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     expect(find.text('No walks yet'), findsOneWidget);
@@ -59,7 +73,7 @@ void main() {
           ),
         ]);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     expect(find.text('Mon, Jun 1'), findsOneWidget);
@@ -89,7 +103,7 @@ void main() {
           ],
         ));
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     await tester.tap(find.byType(InkWell).first);
@@ -101,6 +115,11 @@ void main() {
 
   testWidgets('renders the stored distance without coordinates',
       (tester) async {
+    // Pin the device locale to a metric one: flutter test's default platform
+    // locale is en_US (imperial), which would otherwise make this assertion
+    // depend on the host environment's locale.
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
     when(() => mockRepository.findAll()).thenAnswer((_) async => [
           Walk(
             id: 'w1',
@@ -111,7 +130,7 @@ void main() {
           ),
         ]);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     expect(find.text('1.23 km'), findsOneWidget);
@@ -133,7 +152,7 @@ void main() {
           ),
         ]);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     expect(find.byType(FlutterMap), findsOneWidget);
@@ -167,7 +186,7 @@ void main() {
           ),
         ]);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     expect(tester.takeException(), isNull);
@@ -184,7 +203,7 @@ void main() {
           ),
         ]);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     expect(find.byType(FlutterMap), findsNothing);
@@ -196,7 +215,7 @@ void main() {
     when(() => mockRepository.findAll())
         .thenAnswer((_) async => throw Exception('db is corrupt'));
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pump();
 
     expect(find.text("Couldn't load your walks"), findsOneWidget);
@@ -209,5 +228,24 @@ void main() {
     await tester.pump();
 
     expect(find.text('No walks yet'), findsOneWidget);
+  });
+
+  testWidgets('shows miles when the imperial override is set', (tester) async {
+    prefsValues = {'units_override': 'imperial'};
+    when(() => mockRepository.findAll()).thenAnswer((_) async => [
+          Walk(
+            id: 'w1',
+            startTime: DateTime(2026, 6, 1, 9, 0),
+            endTime: DateTime(2026, 6, 1, 9, 30),
+            duration: const Duration(minutes: 25),
+            distanceMetres: 1609.344,
+          ),
+        ]);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('1.00 mi'), findsOneWidget);
+    expect(find.textContaining('km'), findsNothing);
   });
 }

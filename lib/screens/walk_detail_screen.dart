@@ -3,14 +3,20 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/theme.dart';
 import 'package:walkable/units.dart';
 import 'package:walkable/walk_stats.dart';
 
 class WalkDetailScreen extends StatelessWidget {
   final Walk walk;
+  final SettingsController settingsController;
 
-  const WalkDetailScreen({super.key, required this.walk});
+  const WalkDetailScreen({
+    super.key,
+    required this.walk,
+    required this.settingsController,
+  });
 
   // Every fix of a walk can share one coordinate (a one-point walk, or the
   // user stood still), which makes LatLngBounds.fromPoints zero-size —
@@ -39,6 +45,8 @@ class WalkDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final coords = walk.coordinates.map((c) => LatLng(c.lat, c.lng)).toList();
     final stats = WalkStats.of(walk);
+    final units = settingsController.unitsOverride ??
+        unitSystemForLocale(WidgetsBinding.instance.platformDispatcher.locale);
 
     return Scaffold(
       appBar:
@@ -67,7 +75,7 @@ class WalkDetailScreen extends StatelessWidget {
               ],
             ),
           ),
-          _StatsPanel(stats: stats),
+          _StatsPanel(stats: stats, units: units),
         ],
       ),
     );
@@ -76,13 +84,15 @@ class WalkDetailScreen extends StatelessWidget {
 
 class _StatsPanel extends StatelessWidget {
   final WalkStats stats;
+  final UnitSystem units;
 
-  const _StatsPanel({required this.stats});
+  const _StatsPanel({required this.stats, required this.units});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final pace = stats.formattedPace(UnitSystem.metric, fallback: l10n.paceUnavailable);
+    final pace = stats.formattedPace(units, fallback: l10n.paceUnavailable);
+    final paceUnit = units == UnitSystem.metric ? '/km' : '/mi';
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -90,7 +100,9 @@ class _StatsPanel extends StatelessWidget {
         children: [
           _StatItem(
             label: l10n.statDistance,
-            value: l10n.unitKm(stats.formattedDistance(UnitSystem.metric)),
+            value: units == UnitSystem.metric
+                ? l10n.unitKm(stats.formattedDistance(units))
+                : l10n.unitMi(stats.formattedDistance(units)),
           ),
           _StatItem(
             label: l10n.statDuration,
@@ -98,7 +110,7 @@ class _StatsPanel extends StatelessWidget {
           ),
           _StatItem(
             label: l10n.statPace,
-            value: stats.paceMinPerKm.isFinite ? '$pace /km' : pace,
+            value: stats.paceMinPerKm.isFinite ? '$pace $paceUnit' : pace,
           ),
         ],
       ),
