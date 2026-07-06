@@ -27,6 +27,12 @@ class WalkRecorder {
   RecorderState _state = RecorderState.idle;
   RecorderState get state => _state;
 
+  // Guards the async gap in start()/resume(): the state only flips after
+  // locationService.start() succeeds, so without this a double-tap would pass
+  // the state guard twice and run two full start flows (two walk rows, leaked
+  // subscriptions/tickers).
+  bool _starting = false;
+
   String? _id;
   DateTime? _startTime;
   DateTime? _periodStart;
@@ -51,25 +57,39 @@ class WalkRecorder {
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
   }) async {
-    if (_state != RecorderState.idle) return LocationServiceResult.running;
-    _notification = notification;
-    final result = await locationService.start(notification: notification);
-    if (result == LocationServiceResult.permissionDenied) {
-      return LocationServiceResult.permissionDenied;
+    if (_starting || _state != RecorderState.idle) {
+      return LocationServiceResult.running;
     }
-    _state = RecorderState.recording;
-    _startTime = DateTime.now();
-    _periodStart = _startTime;
-    _id = _generateId(_startTime!);
-    // Persist the walk row up front so an in-progress walk survives a kill.
-    _persist = _repository.createWalk(_id!, _startTime!);
-    _subscription = locationService.positions.listen(_onPosition);
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_state == RecorderState.recording) {
-        _snapshots.add(_buildSnapshot(DateTime.now()));
+    _starting = true;
+    _notification = notification;
+    try {
+      final result = await locationService.start(notification: notification);
+      if (result == LocationServiceResult.permissionDenied) {
+        // Stay idle so the user can try again after granting permission.
+        return LocationServiceResult.permissionDenied;
       }
-    });
-    return LocationServiceResult.started;
+      _state = RecorderState.recording;
+      _startTime = DateTime.now();
+      _periodStart = _startTime;
+      _id = _generateId(_startTime!);
+      // Persist the walk row up front so an in-progress walk survives a kill.
+      // Best-effort like the coordinate writes: a failure is logged rather
+      // than left as an unhandled rejection that would poison the chain and
+      // wedge stop().
+      _persist = _repository.createWalk(_id!, _startTime!).catchError((Object e) {
+        debugPrint('WalkRecorder: failed to persist walk $_id: $e');
+      });
+      _subscription =
+          locationService.positions.listen(_onPosition, onError: _onError);
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (_state == RecorderState.recording) {
+          _snapshots.add(_buildSnapshot(DateTime.now()));
+        }
+      });
+      return LocationServiceResult.started;
+    } finally {
+      _starting = false;
+    }
   }
 
   Future<void> pause() async {
@@ -87,16 +107,27 @@ class WalkRecorder {
   }
 
   Future<void> resume() async {
-    if (_state != RecorderState.paused) return;
-    _state = RecorderState.recording;
-    _periodStart = DateTime.now();
-    await locationService.start(notification: _notification);
-    _subscription = locationService.positions.listen(_onPosition);
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_state == RecorderState.recording) {
-        _snapshots.add(_buildSnapshot(DateTime.now()));
+    if (_starting || _state != RecorderState.paused) return;
+    _starting = true;
+    try {
+      final result = await locationService.start(notification: _notification);
+      if (result == LocationServiceResult.permissionDenied) {
+        // Stay paused: entering recording without a position stream would show
+        // a counting timer while zero coordinates are captured.
+        return;
       }
-    });
+      _state = RecorderState.recording;
+      _periodStart = DateTime.now();
+      _subscription =
+          locationService.positions.listen(_onPosition, onError: _onError);
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (_state == RecorderState.recording) {
+          _snapshots.add(_buildSnapshot(DateTime.now()));
+        }
+      });
+    } finally {
+      _starting = false;
+    }
   }
 
   Future<void> stop() async {
@@ -115,11 +146,18 @@ class WalkRecorder {
 
     // Drain pending coordinate writes, then mark the walk finished with the
     // canonical pause-aware moving time and the total route distance (stored
-    // so the history list never has to reload the coordinates).
-    await _persist;
-    final distance = totalDistance(
-        _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList());
-    await _repository.finishWalk(_id!, endTime, _elapsedAt(endTime), distance);
+    // so the history list never has to reload the coordinates). Best-effort: a
+    // persistence failure must not leave stop() unfinished — the recorder
+    // still ends up stopped so it can be reset and reused.
+    try {
+      await _persist;
+      final distance = totalDistance(
+          _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList());
+      await _repository.finishWalk(
+          _id!, endTime, _elapsedAt(endTime), distance);
+    } catch (e) {
+      debugPrint('WalkRecorder: failed to finish walk $_id: $e');
+    }
   }
 
   void reset() {
@@ -131,12 +169,27 @@ class WalkRecorder {
     _accumulatedDuration = Duration.zero;
     _coordinates.clear();
     _persist = Future<void>.value();
+    // Emit a cleared snapshot so listeners drop the finished walk's polyline
+    // instead of rendering it on the idle map (and into the next walk).
+    if (!_snapshots.isClosed) {
+      _snapshots.add(_buildSnapshot(DateTime.now()));
+    }
   }
 
   void dispose() {
     _ticker?.cancel();
     _subscription?.cancel();
     _snapshots.close();
+  }
+
+  /// Errors forwarded by [LocationService.positions] (e.g. location services
+  /// toggled off mid-walk). Pause instead of silently truncating the walk with
+  /// the timer still counting; pause() also emits a snapshot so the UI reacts.
+  void _onError(Object error) {
+    debugPrint('WalkRecorder: position stream error: $error');
+    if (_state == RecorderState.recording) {
+      unawaited(pause());
+    }
   }
 
   void _onPosition(Position pos) {

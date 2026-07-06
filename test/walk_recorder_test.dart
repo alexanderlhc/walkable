@@ -10,11 +10,24 @@ class _StubLocationService extends LocationService {
   final StreamController<Position> _ctrl =
       StreamController<Position>.broadcast();
 
+  /// What the next [start] call returns (e.g. permissionDenied).
+  LocationServiceResult startResult = LocationServiceResult.started;
+
+  /// When set, [start] suspends until the completer fires — lets tests hold
+  /// the recorder inside start()'s async gap.
+  Completer<void>? startGate;
+
+  int startCalls = 0;
+
   @override
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
-  }) async =>
-      LocationServiceResult.started;
+  }) async {
+    startCalls++;
+    final gate = startGate;
+    if (gate != null) await gate.future;
+    return startResult;
+  }
 
   @override
   Future<void> stop() async {}
@@ -23,6 +36,8 @@ class _StubLocationService extends LocationService {
   Stream<Position> get positions => _ctrl.stream;
 
   void emit(Position pos) => _ctrl.add(pos);
+
+  void emitError(Object error) => _ctrl.addError(error);
 
   @override
   void dispose() => _ctrl.close();
@@ -188,6 +203,99 @@ void main() {
     // not by the 50ms pause gap
     expect(snapshots.last.stats.duration! - elapsedAtPause,
         lessThan(const Duration(milliseconds: 40)));
+  });
+
+  test('concurrent start calls run only one start flow', () async {
+    location.startGate = Completer<void>();
+
+    final first = recorder.start();
+    final second = recorder.start(); // double-tap inside start()'s async gap
+    location.startGate!.complete();
+    final results = await Future.wait([first, second]);
+
+    expect(results.where((r) => r == LocationServiceResult.started).length, 1);
+    expect(results.where((r) => r == LocationServiceResult.running).length, 1);
+    expect(location.startCalls, 1);
+    expect(recorder.state, RecorderState.recording);
+
+    // Only one walk row was created, and positions are not duplicated by a
+    // leaked second subscription.
+    location.emit(_pos(55.676, 12.568));
+    await Future<void>.delayed(Duration.zero);
+    await recorder.stop();
+
+    final walks = await repository.findAll();
+    expect(walks.length, 1);
+    expect(walks[0].endTime, isNotNull);
+    final full = await repository.findById(walks[0].id);
+    expect(full!.coordinates.length, 1);
+  });
+
+  test('start stays idle when permission is denied', () async {
+    location.startResult = LocationServiceResult.permissionDenied;
+
+    final result = await recorder.start();
+
+    expect(result, LocationServiceResult.permissionDenied);
+    expect(recorder.state, RecorderState.idle);
+
+    // The recorder is still usable once permission is granted.
+    location.startResult = LocationServiceResult.started;
+    expect(await recorder.start(), LocationServiceResult.started);
+    expect(recorder.state, RecorderState.recording);
+  });
+
+  test('resume stays paused when permission is denied', () async {
+    await recorder.start();
+    await recorder.pause();
+
+    location.startResult = LocationServiceResult.permissionDenied;
+    await recorder.resume();
+    expect(recorder.state, RecorderState.paused);
+
+    // No coordinates sneak in while denied.
+    location.emit(_pos(55.676, 12.568));
+    await Future<void>.delayed(Duration.zero);
+
+    // A later resume with permission granted works again.
+    location.startResult = LocationServiceResult.started;
+    await recorder.resume();
+    expect(recorder.state, RecorderState.recording);
+
+    await recorder.stop();
+    final walks = await repository.findAll();
+    expect(walks[0].coordinates, isEmpty);
+  });
+
+  test('reset emits a cleared snapshot', () async {
+    await recorder.start();
+    location.emit(_pos(55.676, 12.568));
+    location.emit(_pos(55.677, 12.569));
+    await Future<void>.delayed(Duration.zero);
+    await recorder.stop();
+
+    WalkSnapshot? latest;
+    final sub = recorder.snapshots.listen((s) => latest = s);
+
+    recorder.reset();
+    await Future<void>.delayed(Duration.zero);
+    await sub.cancel();
+
+    expect(latest, isNotNull);
+    expect(latest!.polyline, isEmpty);
+    expect(latest!.stats.distanceMetres, 0);
+  });
+
+  test('position stream error pauses the walk instead of going unhandled',
+      () async {
+    await recorder.start();
+    location.emit(_pos(55.676, 12.568));
+    await Future<void>.delayed(Duration.zero);
+
+    location.emitError(StateError('location services disabled'));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(recorder.state, RecorderState.paused);
   });
 
   test('stop emits final snapshot and saves walk to repository', () async {

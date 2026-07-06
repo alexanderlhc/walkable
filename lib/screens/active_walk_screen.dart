@@ -129,6 +129,10 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       final latlng = LatLng(pos.latitude, pos.longitude);
       setState(() => _currentPosition = latlng);
       _maybeAutoCentre(latlng);
+    }, onError: (Object e) {
+      // Preview only drives the blue dot; log rather than let e.g. a
+      // LocationServiceDisabledException surface as an unhandled async error.
+      debugPrint('ActiveWalkScreen: live preview position error: $e');
     });
   }
 
@@ -237,7 +241,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   Future<void> _onResume() async {
     await widget.recorder.resume();
     if (!mounted) return;
-    setState(() => _recorderState = RecorderState.recording);
+    // Reflect the recorder's actual state: resume() stays paused when the
+    // location permission was revoked in the meantime.
+    setState(() => _recorderState = widget.recorder.state);
   }
 
   Future<void> _onStop() async {
