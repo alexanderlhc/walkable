@@ -5,10 +5,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
+import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
+import 'package:walkable/screens/settings_screen.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/walk_recorder.dart';
 import 'package:walkable/walk_stats.dart';
 
@@ -23,12 +27,17 @@ void main() {
   late MockLocationService locationService;
   late MockWalkRepository repository;
   late StreamController<WalkSnapshot> snapshotsCtrl;
+  late SettingsController settingsController;
 
   setUp(() {
     recorder = MockWalkRecorder();
     locationService = MockLocationService();
     repository = MockWalkRepository();
     snapshotsCtrl = StreamController<WalkSnapshot>.broadcast();
+    SharedPreferences.setMockInitialValues({});
+    // SharedPreferences.getInstance() resolves synchronously enough for
+    // setUp; fetch it inside buildSubject instead to keep setUp sync — see
+    // the updated buildSubject below.
 
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => snapshotsCtrl.stream);
@@ -50,23 +59,31 @@ void main() {
 
   tearDown(() => snapshotsCtrl.close());
 
-  Widget buildSubject({Locale? locale, int recoveredWalkCount = 0}) =>
-      MaterialApp(
-        locale: locale,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: ActiveWalkScreen(
-          recorder: recorder,
-          repository: repository,
-          recoveredWalkCount: recoveredWalkCount,
-        ),
-      );
+  Future<Widget> buildSubject({Locale? locale, int recoveredWalkCount = 0}) async {
+    final prefs = await SharedPreferences.getInstance();
+    settingsController = SettingsController(SettingsRepository(prefs))..load();
+    return MaterialApp(
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: ActiveWalkScreen(
+        recorder: recorder,
+        repository: repository,
+        settingsController: settingsController,
+        recoveredWalkCount: recoveredWalkCount,
+      ),
+    );
+  }
 
   // ─── localization ────────────────────────────────────────────────────────────
 
   testWidgets('renders Danish strings when the locale is Danish',
       (tester) async {
-    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+    await tester.pumpWidget(await buildSubject(locale: const Locale('da')));
+    await tester.pumpAndSettle();
+
+    // The History label lives inside the menu, so open it first.
+    await tester.tap(find.byKey(const Key('menu_button')));
     await tester.pumpAndSettle();
 
     expect(find.text('Tidligere gåture'), findsOneWidget);
@@ -75,22 +92,58 @@ void main() {
   // ─── idle state ────────────────────────────────────────────────────────────
 
   testWidgets('Start button visible in idle state', (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('start_button')), findsOneWidget);
     expect(find.byKey(const Key('stop_button')), findsNothing);
   });
 
-  testWidgets('History button visible in idle state', (tester) async {
-    await tester.pumpWidget(buildSubject());
+  testWidgets('menu chip visible in idle state', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('menu_button')), findsOneWidget);
+  });
+
+  testWidgets('menu opens with History and Settings items', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('menu_button')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('history_button')), findsOneWidget);
+    expect(find.byKey(const Key('settings_button')), findsOneWidget);
+  });
+
+  testWidgets('menu History item opens the history screen', (tester) async {
+    when(() => repository.findAll()).thenAnswer((_) async => []);
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('menu_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('history_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Walk History'), findsOneWidget);
+  });
+
+  testWidgets('menu Settings item opens the settings screen', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('menu_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SettingsScreen), findsOneWidget);
   });
 
   testWidgets('permission check is requested on startup', (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     verify(() => locationService.checkAndRequestPermission()).called(1);
@@ -101,7 +154,7 @@ void main() {
     when(() => locationService.checkAndRequestPermission())
         .thenAnswer((_) async => false);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     expect(find.byType(SnackBar), findsOneWidget);
@@ -109,7 +162,7 @@ void main() {
 
   testWidgets('watchPosition stream subscribed after permission granted',
       (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     verify(() => locationService.watchPosition()).called(1);
@@ -120,7 +173,7 @@ void main() {
     when(() => locationService.checkAndRequestPermission())
         .thenAnswer((_) async => false);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     verifyNever(() => locationService.watchPosition());
@@ -129,7 +182,7 @@ void main() {
   // ─── startup crash recovery ──────────────────────────────────────────────
 
   testWidgets('announces a recovered walk with a snackbar', (tester) async {
-    await tester.pumpWidget(buildSubject(recoveredWalkCount: 1));
+    await tester.pumpWidget(await buildSubject(recoveredWalkCount: 1));
     await tester.pumpAndSettle();
 
     expect(find.text('Recovered an interrupted walk to your history'),
@@ -138,7 +191,7 @@ void main() {
 
   testWidgets('recovery snackbar pluralises for several walks',
       (tester) async {
-    await tester.pumpWidget(buildSubject(recoveredWalkCount: 3));
+    await tester.pumpWidget(await buildSubject(recoveredWalkCount: 3));
     await tester.pumpAndSettle();
 
     expect(find.text('Recovered 3 interrupted walks to your history'),
@@ -147,7 +200,7 @@ void main() {
 
   testWidgets('no recovery snackbar when nothing was recovered',
       (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     expect(find.byType(SnackBar), findsNothing);
@@ -157,7 +210,7 @@ void main() {
 
   testWidgets('re-centre button hidden when no position known yet',
       (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('recenter_button')), findsNothing);
@@ -168,7 +221,7 @@ void main() {
     when(() => locationService.checkAndRequestPermission())
         .thenAnswer((_) async => false);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('recenter_button')), findsNothing);
@@ -178,7 +231,7 @@ void main() {
 
   testWidgets('Stop and Pause buttons visible after tapping Start',
       (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -206,7 +259,7 @@ void main() {
     when(() => locationService.watchPosition())
         .thenAnswer((_) => preview.stream);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
     expect(preview.hasListener, isTrue,
         reason: 'preview stream should be live before recording');
@@ -222,7 +275,7 @@ void main() {
       (tester) async {
     when(() => locationService.notificationsGranted).thenReturn(false);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -233,7 +286,7 @@ void main() {
   });
 
   testWidgets('no warning when notifications are granted', (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -243,7 +296,7 @@ void main() {
   });
 
   testWidgets('RECORDING label visible when recording', (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -252,21 +305,20 @@ void main() {
     expect(find.text('RECORDING'), findsOneWidget);
   });
 
-  testWidgets('history button remains visible during recording',
-      (tester) async {
-    await tester.pumpWidget(buildSubject());
+  testWidgets('menu chip remains visible during recording', (tester) async {
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('history_button')), findsOneWidget);
+    expect(find.byKey(const Key('menu_button')), findsOneWidget);
   });
 
   // ─── paused state ──────────────────────────────────────────────────────────
 
   testWidgets('Resume and Stop buttons visible while paused', (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -283,7 +335,7 @@ void main() {
   });
 
   testWidgets('PAUSED label visible when paused', (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -300,7 +352,7 @@ void main() {
 
   testWidgets('stats section shown when recorder emits a snapshot',
       (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     when(() => recorder.state).thenReturn(RecorderState.recording);
@@ -347,7 +399,7 @@ void main() {
   });
 
   testWidgets('stats hidden in idle state', (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     expect(find.text('RECORDING'), findsNothing);
@@ -358,7 +410,7 @@ void main() {
 
   testWidgets('tapping Stop calls stop and reset, returns to idle',
       (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -381,7 +433,7 @@ void main() {
   testWidgets('restarts the live preview after stopping', (tester) async {
     // Recording cancels the preview stream; once the walk ends and we return to
     // idle, the preview must be re-subscribed so the blue dot keeps following.
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('start_button')));
@@ -423,7 +475,7 @@ void main() {
     when(() => locationService.watchPosition())
         .thenAnswer((_) => positions.stream);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     // New York — far from the hardcoded Copenhagen default centre.
@@ -439,7 +491,7 @@ void main() {
 
   testWidgets('auto-centres the map on the first fix from the snapshots stream',
       (tester) async {
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     when(() => recorder.state).thenReturn(RecorderState.recording);
@@ -460,7 +512,7 @@ void main() {
     when(() => locationService.watchPosition())
         .thenAnswer((_) => positions.stream);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     positions.add(pos(40.7128, -74.0060)); // first fix → auto-centre
@@ -489,7 +541,7 @@ void main() {
     when(() => locationService.watchPosition())
         .thenAnswer((_) => positions.stream);
 
-    await tester.pumpWidget(buildSubject());
+    await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
     // First fix auto-centres; the dot sits mid-map, comfortably in view.

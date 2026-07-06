@@ -24,10 +24,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/main.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
+import 'package:walkable/settings_controller.dart';
 import 'package:walkable/walk_calculator.dart';
 import 'package:walkable/walk_recorder.dart';
 
@@ -61,9 +64,17 @@ void main() {
       locationService: location,
       repository: repo,
     );
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
 
     await tester.pumpWidget(
-      WalkableApp(recorder: recorder, repository: repo),
+      WalkableApp(
+        recorder: recorder,
+        repository: repo,
+        settingsController: settingsController,
+      ),
     );
     // Let the screen request permission and subscribe to the position stream.
     await tester.pump(const Duration(milliseconds: 600));
@@ -77,6 +88,8 @@ void main() {
     // the Android surface readback reflects the pushed route (a plain
     // pumpAndSettle is instant with animations off and can capture a stale
     // frame, especially on slower/larger devices).
+    await tester.tap(find.byKey(const Key('menu_button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('history_button')));
     await tester.pumpAndSettle();
     await _breathe(tester);
