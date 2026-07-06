@@ -12,6 +12,7 @@ import 'package:walkable/screens/settings_screen.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/theme.dart';
+import 'package:walkable/units.dart';
 import 'package:walkable/walk_recorder.dart';
 import 'package:walkable/walk_stats.dart';
 
@@ -561,7 +562,7 @@ class _BottomPanelState extends State<_BottomPanel> {
             children: [
               _StatBlock(
                 label: l10n.statDistance,
-                value: stats.formattedDistance(),
+                value: stats.formattedDistance(UnitSystem.metric),
                 unit: 'km',
               ),
               VerticalDivider(color: cs.outlineVariant, width: 1),
@@ -574,7 +575,7 @@ class _BottomPanelState extends State<_BottomPanel> {
               VerticalDivider(color: cs.outlineVariant, width: 1),
               _StatBlock(
                 label: l10n.statPace,
-                value: stats.formattedPace(fallback: l10n.paceUnavailable),
+                value: stats.formattedPace(UnitSystem.metric, fallback: l10n.paceUnavailable),
                 unit: stats.paceMinPerKm.isFinite ? '/km' : null,
               ),
             ],

@@ -1,4 +1,5 @@
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/units.dart';
 import 'package:walkable/walk_calculator.dart' as calc;
 
 /// The canonical stats for a walk — distance, duration and pace — together with
@@ -39,15 +40,27 @@ class WalkStats {
         duration: walk.duration,
       );
 
+  static const _metresPerMile = 1609.344;
+
   double get distanceKm => distanceMetres / 1000;
+
+  double get distanceMiles => distanceMetres / _metresPerMile;
 
   /// Pace in min/km. Carries [calc.pace]'s sentinels: infinity for zero
   /// distance or unknown duration, 0.0 for zero duration.
   double get paceMinPerKm =>
       duration == null ? double.infinity : calc.pace(distanceMetres, duration!);
 
-  /// Distance in kilometres to two decimals (e.g. `"1.23"`).
-  String formattedDistance() => distanceKm.toStringAsFixed(2);
+  /// Pace in minutes per display unit (km or mile). The sentinels pass
+  /// through unchanged (infinity stays infinity, 0.0 stays 0.0).
+  double paceMinPerUnit(UnitSystem units) => units == UnitSystem.metric
+      ? paceMinPerKm
+      : paceMinPerKm * (_metresPerMile / 1000);
+
+  /// Distance in the display unit to two decimals (e.g. `"1.23"`).
+  String formattedDistance(UnitSystem units) =>
+      (units == UnitSystem.metric ? distanceKm : distanceMiles)
+          .toStringAsFixed(2);
 
   /// Duration as `h:mm:ss`, or `m:ss` when under an hour. Returns [fallback]
   /// when the duration is unknown.
@@ -59,7 +72,8 @@ class WalkStats {
     return d.inHours > 0 ? '${d.inHours}:$m:$s' : '$m:$s';
   }
 
-  /// Pace as `m:ss`, or [fallback] for the unavailable sentinels.
-  String formattedPace({required String fallback}) =>
-      calc.formatPace(paceMinPerKm, fallback: fallback);
+  /// Pace as `m:ss` in the display unit, or [fallback] for the unavailable
+  /// sentinels.
+  String formattedPace(UnitSystem units, {required String fallback}) =>
+      calc.formatPace(paceMinPerUnit(units), fallback: fallback);
 }

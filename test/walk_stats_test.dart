@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/units.dart';
 import 'package:walkable/walk_stats.dart';
 
 void main() {
@@ -64,7 +65,7 @@ void main() {
   group('formattedDistance', () {
     test('formats metres as kilometres to two decimals', () {
       const stats = WalkStats(distanceMetres: 1234.5, duration: null);
-      expect(stats.formattedDistance(), '1.23');
+      expect(stats.formattedDistance(UnitSystem.metric), '1.23');
     });
   });
 
@@ -99,7 +100,7 @@ void main() {
         coordinates: [london, paris],
         duration: Duration(milliseconds: (344 * 6 * 60000).round()),
       );
-      expect(stats.formattedPace(fallback: '--:--'), '6:00');
+      expect(stats.formattedPace(UnitSystem.metric, fallback: '--:--'), '6:00');
     });
 
     test('returns fallback for the zero-distance sentinel', () {
@@ -107,7 +108,55 @@ void main() {
         coordinates: const [],
         duration: const Duration(minutes: 10),
       );
-      expect(stats.formattedPace(fallback: '--:--'), '--:--');
+      expect(stats.formattedPace(UnitSystem.metric, fallback: '--:--'), '--:--');
+    });
+  });
+
+  group('imperial units', () {
+    test('distanceMiles converts from metres', () {
+      const stats = WalkStats(
+        distanceMetres: 1609.344,
+        duration: Duration(minutes: 10),
+      );
+      expect(stats.distanceMiles, closeTo(1.0, 0.0001));
+    });
+
+    test('formattedDistance formats per unit system', () {
+      const stats = WalkStats(
+        distanceMetres: 3218.688, // 2 miles, ~3.22 km
+        duration: Duration(minutes: 40),
+      );
+      expect(stats.formattedDistance(UnitSystem.metric), '3.22');
+      expect(stats.formattedDistance(UnitSystem.imperial), '2.00');
+    });
+
+    test('paceMinPerUnit scales pace to min per mile', () {
+      const stats = WalkStats(
+        distanceMetres: 1609.344, // 1 mile in 16 min -> 16 min/mi
+        duration: Duration(minutes: 16),
+      );
+      expect(stats.paceMinPerUnit(UnitSystem.imperial), closeTo(16.0, 0.001));
+      expect(stats.paceMinPerUnit(UnitSystem.metric),
+          closeTo(16.0 / 1.609344, 0.001));
+    });
+
+    test('pace sentinels pass through unchanged in imperial', () {
+      const zeroDistance = WalkStats(
+        distanceMetres: 0,
+        duration: Duration(minutes: 5),
+      );
+      expect(zeroDistance.paceMinPerUnit(UnitSystem.imperial), double.infinity);
+
+      const noDuration = WalkStats(distanceMetres: 1000, duration: null);
+      expect(noDuration.paceMinPerUnit(UnitSystem.imperial), double.infinity);
+
+      const zeroDuration = WalkStats(
+        distanceMetres: 1000,
+        duration: Duration.zero,
+      );
+      expect(zeroDuration.paceMinPerUnit(UnitSystem.imperial), 0.0);
+      expect(zeroDuration.formattedPace(UnitSystem.imperial, fallback: '--'),
+          '--');
     });
   });
 }

@@ -6,6 +6,7 @@ import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/theme.dart';
+import 'package:walkable/units.dart';
 import 'package:walkable/walk_stats.dart';
 
 class WalkHistoryScreen extends StatefulWidget {
@@ -146,7 +147,7 @@ class _WalkCard extends StatelessWidget {
               child: Row(
                 children: [
                   _Stat(
-                    value: l10n.unitKm(stats.formattedDistance()),
+                    value: l10n.unitKm(stats.formattedDistance(UnitSystem.metric)),
                     label: l10n.statDistance,
                     emphasized: true,
                   ),
@@ -158,7 +159,7 @@ class _WalkCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 28),
                   _Stat(
-                    value: stats.formattedPace(fallback: l10n.paceUnavailable),
+                    value: stats.formattedPace(UnitSystem.metric, fallback: l10n.paceUnavailable),
                     label: l10n.statPace,
                   ),
                   const Spacer(),

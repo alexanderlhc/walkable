@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/theme.dart';
+import 'package:walkable/units.dart';
 import 'package:walkable/walk_stats.dart';
 
 class WalkDetailScreen extends StatelessWidget {
@@ -81,7 +82,7 @@ class _StatsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final pace = stats.formattedPace(fallback: l10n.paceUnavailable);
+    final pace = stats.formattedPace(UnitSystem.metric, fallback: l10n.paceUnavailable);
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -89,7 +90,7 @@ class _StatsPanel extends StatelessWidget {
         children: [
           _StatItem(
             label: l10n.statDistance,
-            value: l10n.unitKm(stats.formattedDistance()),
+            value: l10n.unitKm(stats.formattedDistance(UnitSystem.metric)),
           ),
           _StatItem(
             label: l10n.statDuration,
