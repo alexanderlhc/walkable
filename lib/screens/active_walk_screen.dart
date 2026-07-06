@@ -195,7 +195,13 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       );
       return;
     }
-    setState(() => _recorderState = RecorderState.recording);
+    setState(() {
+      _recorderState = RecorderState.recording;
+      // recorder.start() re-ran the permission check and it succeeded; keep
+      // the flag in sync so the post-walk live preview (see [_onStop]) and the
+      // recentre chip work even when the initial launch request was denied.
+      _locationPermissionGranted = true;
+    });
     if (!widget.recorder.locationService.notificationsGranted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
