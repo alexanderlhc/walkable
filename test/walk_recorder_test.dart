@@ -330,4 +330,25 @@ void main() {
     final full = await repository.findById(walks[0].id);
     expect(full!.coordinates.length, 2);
   });
+
+  test('stop stores a simplified route for the history preview', () async {
+    await recorder.start();
+
+    // Three fixes with a collinear midpoint the simplifier drops.
+    location.emit(_pos(55.676, 12.568));
+    location.emit(_pos(55.677, 12.568));
+    location.emit(_pos(55.678, 12.568));
+    await Future<void>.delayed(Duration.zero);
+
+    await recorder.stop();
+
+    final walks = await repository.findAll();
+    expect(walks.single.route, [
+      (lat: 55.676, lng: 12.568),
+      (lat: 55.678, lng: 12.568),
+    ]);
+    // The full recording is untouched — only the preview is simplified.
+    final full = await repository.findById(walks.single.id);
+    expect(full!.coordinates.length, 3);
+  });
 }

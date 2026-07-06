@@ -1,10 +1,11 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
+import 'package:walkable/theme.dart';
 import 'package:walkable/walk_stats.dart';
 
 class WalkHistoryScreen extends StatefulWidget {
@@ -88,8 +89,8 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
   }
 }
 
-/// A walk in the history feed: the route sketch area (walks from the list are
-/// loaded without coordinates, so this renders the placeholder mark), with the
+/// A walk in the history feed: a mini map of the stored route preview (or a
+/// placeholder mark for walks persisted before routes were stored), with the
 /// date and the headline stats (distance, duration, pace) beneath it.
 class _WalkCard extends StatelessWidget {
   final Walk walk;
@@ -103,6 +104,7 @@ class _WalkCard extends StatelessWidget {
     final l10n = AppLocalizations.of(context)!;
     final locale = Localizations.localeOf(context).toString();
     final stats = WalkStats.of(walk);
+    final route = walk.route ?? const [];
 
     return Card(
       elevation: 0,
@@ -116,15 +118,19 @@ class _WalkCard extends StatelessWidget {
           children: [
             Stack(
               children: [
-                Container(
+                SizedBox(
                   height: 168,
-                  color: cs.surfaceContainerHighest,
-                  padding: const EdgeInsets.all(18),
-                  child: _RouteSketch(
-                    coordinates: walk.coordinates,
-                    color: cs.primary,
-                    strokeWidth: 4,
-                  ),
+                  child: route.isNotEmpty
+                      ? _MiniRouteMap(
+                          points: [
+                            for (final c in route) LatLng(c.lat, c.lng),
+                          ],
+                        )
+                      : Container(
+                          color: cs.surfaceContainerHighest,
+                          padding: const EdgeInsets.all(18),
+                          child: const _RoutePlaceholder(),
+                        ),
                 ),
                 Positioned(
                   top: 12,
@@ -222,107 +228,94 @@ class _DatePill extends StatelessWidget {
   }
 }
 
-/// Draws a recorded route as a normalized vector path — no map tiles, so it
-/// renders instantly and offline.
-class _RouteSketch extends StatelessWidget {
-  final List<Coordinate> coordinates;
-  final Color color;
-  final double strokeWidth;
+/// A non-interactive tile-map preview of a walk's stored route. Wrapped in
+/// [IgnorePointer] (with all interaction flags off) so taps fall through to
+/// the card's [InkWell].
+class _MiniRouteMap extends StatelessWidget {
+  final List<LatLng> points;
 
-  const _RouteSketch({
-    required this.coordinates,
-    required this.color,
-    this.strokeWidth = 4,
-  });
+  const _MiniRouteMap({required this.points});
+
+  // Every point of a route can share one coordinate (a one-point walk, or the
+  // user stood still), which makes LatLngBounds.fromPoints zero-size —
+  // flutter_map's bounds-zoom fit can't compute a zoom for those. Fall back
+  // to centring on the point at a fixed zoom instead (same approach as the
+  // detail screen).
+  MapOptions _mapOptions() {
+    const interaction = InteractionOptions(flags: InteractiveFlag.none);
+    final bounds = LatLngBounds.fromPoints(points);
+    if (bounds.north == bounds.south && bounds.east == bounds.west) {
+      return MapOptions(
+        initialCenter: points.first,
+        initialZoom: 17,
+        interactionOptions: interaction,
+      );
+    }
+    return MapOptions(
+      initialCameraFit: CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(24),
+      ),
+      interactionOptions: interaction,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.infinite,
-      painter: _RoutePainter(
-        coordinates: coordinates,
-        color: color,
-        strokeWidth: strokeWidth,
+    return IgnorePointer(
+      child: FlutterMap(
+        options: _mapOptions(),
+        children: [
+          TileLayer(
+            urlTemplate: mapTileUrl(Theme.of(context).brightness),
+            subdomains: mapTileSubdomains,
+            userAgentPackageName: 'dk.alexanderlhc.walkable',
+          ),
+          PolylineLayer(
+            polylines: [
+              Polyline(
+                points: points,
+                strokeWidth: 4,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _RoutePainter extends CustomPainter {
-  final List<Coordinate> coordinates;
-  final Color color;
-  final double strokeWidth;
+/// The preview mark for walks with no stored route (persisted before the
+/// route column existed): the same faint centred dot the route sketch used to
+/// draw for empty routes.
+class _RoutePlaceholder extends StatelessWidget {
+  const _RoutePlaceholder();
 
-  _RoutePainter({
-    required this.coordinates,
-    required this.color,
-    required this.strokeWidth,
-  });
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return CustomPaint(
+      size: Size.infinite,
+      painter: _PlaceholderDotPainter(color: cs.primary),
+    );
+  }
+}
+
+class _PlaceholderDotPainter extends CustomPainter {
+  final Color color;
+
+  _PlaceholderDotPainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (coordinates.length < 2) {
-      canvas.drawCircle(
-        size.center(Offset.zero),
-        strokeWidth,
-        Paint()..color = color.withValues(alpha: 0.4),
-      );
-      return;
-    }
-
-    var minLat = coordinates.first.lat, maxLat = coordinates.first.lat;
-    var minLng = coordinates.first.lng, maxLng = coordinates.first.lng;
-    for (final c in coordinates) {
-      minLat = math.min(minLat, c.lat);
-      maxLat = math.max(maxLat, c.lat);
-      minLng = math.min(minLng, c.lng);
-      maxLng = math.max(maxLng, c.lng);
-    }
-
-    final pad = strokeWidth * 2 + 6;
-    final w = size.width - pad * 2;
-    final h = size.height - pad * 2;
-    final spanLng = (maxLng - minLng).abs();
-    final spanLat = (maxLat - minLat).abs();
-    final scale = math.min(
-      w / (spanLng == 0 ? 1e-9 : spanLng),
-      h / (spanLat == 0 ? 1e-9 : spanLat),
-    );
-    final ox = pad + (w - spanLng * scale) / 2;
-    final oy = pad + (h - spanLat * scale) / 2;
-
-    Offset project(Coordinate c) => Offset(
-          ox + (c.lng - minLng) * scale,
-          oy + (maxLat - c.lat) * scale, // north is up
-        );
-
-    final first = project(coordinates.first);
-    final path = Path()..moveTo(first.dx, first.dy);
-    for (final c in coordinates.skip(1)) {
-      final p = project(c);
-      path.lineTo(p.dx, p.dy);
-    }
-
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    // Start (faint) and end (solid) markers.
-    canvas.drawCircle(project(coordinates.first), strokeWidth * 1.4,
-        Paint()..color = color.withValues(alpha: 0.35));
     canvas.drawCircle(
-        project(coordinates.last), strokeWidth * 1.5, Paint()..color = color);
+      size.center(Offset.zero),
+      4,
+      Paint()..color = color.withValues(alpha: 0.4),
+    );
   }
 
   @override
-  bool shouldRepaint(_RoutePainter old) =>
-      old.coordinates != coordinates ||
-      old.color != color ||
-      old.strokeWidth != strokeWidth;
+  bool shouldRepaint(_PlaceholderDotPainter old) => old.color != color;
 }

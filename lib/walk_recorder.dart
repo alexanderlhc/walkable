@@ -145,16 +145,17 @@ class WalkRecorder {
     _snapshots.add(_buildSnapshot(endTime));
 
     // Drain pending coordinate writes, then mark the walk finished with the
-    // canonical pause-aware moving time and the total route distance (stored
-    // so the history list never has to reload the coordinates). Best-effort: a
-    // persistence failure must not leave stop() unfinished — the recorder
-    // still ends up stopped so it can be reset and reused.
+    // canonical pause-aware moving time, the total route distance, and the
+    // simplified route preview (stored so the history list never has to
+    // reload the coordinates). Best-effort: a persistence failure must not
+    // leave stop() unfinished — the recorder still ends up stopped so it can
+    // be reset and reused.
     try {
       await _persist;
-      final distance = totalDistance(
-          _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList());
-      await _repository.finishWalk(
-          _id!, endTime, _elapsedAt(endTime), distance);
+      final coords =
+          _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
+      await _repository.finishWalk(_id!, endTime, _elapsedAt(endTime),
+          totalDistance(coords), simplifyRoute(coords));
     } catch (e) {
       debugPrint('WalkRecorder: failed to finish walk $_id: $e');
     }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/models/walk.dart';
@@ -113,6 +115,80 @@ void main() {
     await tester.pump();
 
     expect(find.text('1.23 km'), findsOneWidget);
+  });
+
+  testWidgets('renders a mini map with the stored route polyline',
+      (tester) async {
+    when(() => mockRepository.findAll()).thenAnswer((_) async => [
+          Walk(
+            id: 'w1',
+            startTime: DateTime(2026, 6, 1, 9, 0),
+            endTime: DateTime(2026, 6, 1, 9, 30),
+            duration: const Duration(minutes: 25),
+            distanceMetres: 127.5,
+            route: const [
+              (lat: 55.676, lng: 12.568),
+              (lat: 55.677, lng: 12.569),
+            ],
+          ),
+        ]);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    expect(find.byType(FlutterMap), findsOneWidget);
+    final layer = tester.widget<PolylineLayer>(
+        find.byWidgetPredicate((w) => w is PolylineLayer));
+    expect(layer.polylines.single.points, const [
+      LatLng(55.676, 12.568),
+      LatLng(55.677, 12.569),
+    ]);
+    // Taps must fall through the map to the card's InkWell.
+    expect(
+      find.ancestor(
+          of: find.byType(FlutterMap), matching: find.byType(IgnorePointer)),
+      findsAtLeastNWidgets(1),
+    );
+  });
+
+  testWidgets('renders a map for a route where every point is identical',
+      (tester) async {
+    // Zero-size bounds can't drive a bounds fit; the card falls back to a
+    // fixed zoom instead of throwing.
+    when(() => mockRepository.findAll()).thenAnswer((_) async => [
+          Walk(
+            id: 'w1',
+            startTime: DateTime(2026, 6, 1, 9, 0),
+            endTime: DateTime(2026, 6, 1, 9, 30),
+            route: const [
+              (lat: 55.676, lng: 12.568),
+              (lat: 55.676, lng: 12.568),
+            ],
+          ),
+        ]);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(FlutterMap), findsOneWidget);
+  });
+
+  testWidgets('keeps the placeholder for walks without a stored route',
+      (tester) async {
+    when(() => mockRepository.findAll()).thenAnswer((_) async => [
+          Walk(
+            id: 'w1',
+            startTime: DateTime(2026, 6, 1, 9, 0),
+            endTime: DateTime(2026, 6, 1, 9, 30),
+          ),
+        ]);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    expect(find.byType(FlutterMap), findsNothing);
+    expect(find.byType(Card), findsOneWidget);
   });
 
   testWidgets('shows an error state with retry when loading fails',

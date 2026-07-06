@@ -126,7 +126,7 @@ void main() {
     test('finishWalk records the end time and pause-aware duration', () async {
       await repository.createWalk('done', DateTime(2026, 6, 1, 9, 0));
       await repository.finishWalk('done', DateTime(2026, 6, 1, 9, 30),
-          const Duration(minutes: 25), 1250.0);
+          const Duration(minutes: 25), 1250.0, const []);
 
       final found = await repository.findById('done');
       expect(found!.endTime, DateTime(2026, 6, 1, 9, 30));
@@ -171,7 +171,7 @@ void main() {
               lat: 55.677, lng: 12.569, recordedAt: DateTime(2026, 6, 1, 9, 5)),
           1);
       await repository.finishWalk('walked', DateTime(2026, 6, 1, 9, 30),
-          const Duration(minutes: 25), 127.5);
+          const Duration(minutes: 25), 127.5, const []);
 
       final walks = await repository.findAll();
       expect(walks.single.distanceMetres, 127.5);
@@ -204,6 +204,62 @@ void main() {
 
       // ~128 m between the two fixes (haversine).
       expect(walks.single.distanceMetres, closeTo(128, 5));
+    });
+  });
+
+  group('stored route', () {
+    test('finishWalk persists the simplified route', () async {
+      await repository.createWalk('routed', DateTime(2026, 6, 1, 9, 0));
+      await repository.finishWalk(
+        'routed',
+        DateTime(2026, 6, 1, 9, 30),
+        const Duration(minutes: 25),
+        127.5,
+        const [(lat: 55.676, lng: 12.568), (lat: 55.677, lng: 12.569)],
+      );
+
+      final walks = await repository.findAll();
+      expect(walks.single.route, [
+        (lat: 55.676, lng: 12.568),
+        (lat: 55.677, lng: 12.569),
+      ]);
+    });
+
+    test('findAll returns the route without hydrating coordinates', () async {
+      await repository.createWalk('routed', DateTime(2026, 6, 1, 9, 0));
+      await repository.appendCoordinate(
+          'routed',
+          Coordinate(
+              lat: 55.676, lng: 12.568, recordedAt: DateTime(2026, 6, 1, 9, 0)),
+          0);
+      await repository.appendCoordinate(
+          'routed',
+          Coordinate(
+              lat: 55.677, lng: 12.569, recordedAt: DateTime(2026, 6, 1, 9, 5)),
+          1);
+      await repository.finishWalk(
+        'routed',
+        DateTime(2026, 6, 1, 9, 30),
+        const Duration(minutes: 25),
+        127.5,
+        const [(lat: 55.676, lng: 12.568), (lat: 55.677, lng: 12.569)],
+      );
+
+      final walks = await repository.findAll();
+      // The preview route is available while the coordinates stay unhydrated.
+      expect(walks.single.route, hasLength(2));
+      expect(walks.single.coordinates, isEmpty);
+    });
+
+    test('an empty route round-trips as an empty list', () async {
+      await repository.createWalk('short', DateTime(2026, 6, 1, 9, 0));
+      // A walk with no fixes finishes with an empty route.
+      await repository.finishWalk('short', DateTime(2026, 6, 1, 9, 30),
+          const Duration(minutes: 25), 0.0, const []);
+
+      final walks = await repository.findAll();
+      // Empty, not null — the card renders the placeholder either way.
+      expect(walks.single.route, isEmpty);
     });
   });
 
@@ -273,6 +329,82 @@ void main() {
       // ~128 m between the two fixes, backfilled from the coordinates.
       expect(walks.single.distanceMetres, closeTo(128, 5));
       expect(walks.single.duration, const Duration(minutes: 40));
+    });
+
+    test('v3 → v4 backfills the simplified route from stored coordinates',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('walkable_test');
+      final path = p.join(dir.path, 'walkable.db');
+
+      // Build a v3 database by hand: distance column, but no route yet.
+      final v3 = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 3,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE walks (
+                id TEXT PRIMARY KEY,
+                start_time INTEGER NOT NULL,
+                end_time INTEGER,
+                duration_ms INTEGER,
+                distance REAL
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE coordinates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                walk_id TEXT NOT NULL,
+                lat REAL NOT NULL,
+                lng REAL NOT NULL,
+                recorded_at INTEGER NOT NULL,
+                sequence_index INTEGER NOT NULL,
+                FOREIGN KEY (walk_id) REFERENCES walks (id)
+              )
+            ''');
+          },
+        ),
+      );
+      await v3.insert('walks', {
+        'id': 'legacy',
+        'start_time': DateTime(2026, 5, 1, 8, 0).millisecondsSinceEpoch,
+        'end_time': DateTime(2026, 5, 1, 8, 45).millisecondsSinceEpoch,
+        'duration_ms': const Duration(minutes: 40).inMilliseconds,
+        'distance': 250.0,
+      });
+      // Three fixes with a collinear midpoint the simplifier drops.
+      final fixes = [
+        (lat: 55.676, lng: 12.568),
+        (lat: 55.677, lng: 12.568),
+        (lat: 55.678, lng: 12.568),
+      ];
+      for (var i = 0; i < fixes.length; i++) {
+        await v3.insert('coordinates', {
+          'walk_id': 'legacy',
+          'lat': fixes[i].lat,
+          'lng': fixes[i].lng,
+          'recorded_at':
+              DateTime(2026, 5, 1, 8, 15 * i).millisecondsSinceEpoch,
+          'sequence_index': i,
+        });
+      }
+      await v3.close();
+
+      // Reopening through the repository runs the v4 upgrade.
+      final migrated = await WalkRepository.open(path);
+      addTearDown(() async {
+        await migrated.close();
+        await dir.delete(recursive: true);
+      });
+
+      final walks = await migrated.findAll();
+      // Backfilled and simplified: the collinear midpoint is gone.
+      expect(walks.single.route, [
+        (lat: 55.676, lng: 12.568),
+        (lat: 55.678, lng: 12.568),
+      ]);
+      // The list still doesn't hydrate coordinates.
+      expect(walks.single.coordinates, isEmpty);
     });
   });
 
