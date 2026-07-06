@@ -93,6 +93,15 @@ class AppLocalizationsDa extends AppLocalizations {
   String get themeDark => 'Mørkt';
 
   @override
+  String get settingsUnits => 'Enheder';
+
+  @override
+  String get unitsKilometers => 'Kilometer';
+
+  @override
+  String get unitsMiles => 'Miles';
+
+  @override
   String get locationPermissionDenied => 'Placeringstilladelse nægtet';
 
   @override

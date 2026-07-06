@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/settings_controller.dart';
+import 'package:walkable/units.dart';
 
 class SettingsScreen extends StatelessWidget {
   final SettingsController controller;
@@ -62,6 +63,30 @@ class SettingsScreen extends StatelessWidget {
                     key: const Key('theme_dark'),
                     value: ThemeMode.dark,
                     title: Text(l10n.themeDark),
+                  ),
+                ],
+              ),
+            ),
+            _SectionHeader(l10n.settingsUnits),
+            RadioGroup<UnitSystem?>(
+              groupValue: controller.unitsOverride,
+              onChanged: controller.setUnitsOverride,
+              child: Column(
+                children: [
+                  RadioListTile<UnitSystem?>(
+                    key: const Key('units_system'),
+                    value: null,
+                    title: Text(l10n.settingsSystemDefault),
+                  ),
+                  RadioListTile<UnitSystem?>(
+                    key: const Key('units_km'),
+                    value: UnitSystem.metric,
+                    title: Text(l10n.unitsKilometers),
+                  ),
+                  RadioListTile<UnitSystem?>(
+                    key: const Key('units_mi'),
+                    value: UnitSystem.imperial,
+                    title: Text(l10n.unitsMiles),
                   ),
                 ],
               ),

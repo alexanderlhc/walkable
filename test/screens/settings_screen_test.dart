@@ -5,6 +5,7 @@ import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/screens/settings_screen.dart';
 import 'package:walkable/settings_controller.dart';
+import 'package:walkable/units.dart';
 
 void main() {
   late SettingsController controller;
@@ -27,7 +28,7 @@ void main() {
     await tester.pumpWidget(buildSubject());
 
     expect(find.text('Language'), findsOneWidget);
-    expect(find.text('System default'), findsNWidgets(2)); // language + theme
+    expect(find.text('System default'), findsNWidgets(3)); // language + theme + units
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Dansk'), findsOneWidget);
   });
@@ -97,7 +98,7 @@ void main() {
 
     expect(find.text('Indstillinger'), findsOneWidget);
     expect(find.text('Sprog'), findsOneWidget);
-    expect(find.text('Systemstandard'), findsNWidgets(2)); // language + theme
+    expect(find.text('Systemstandard'), findsNWidgets(3)); // language + theme + units
   });
 
   testWidgets('shows theme section with the three options', (tester) async {
@@ -161,5 +162,66 @@ void main() {
     expect(find.text('Tema'), findsOneWidget);
     expect(find.text('Lyst'), findsOneWidget);
     expect(find.text('Mørkt'), findsOneWidget);
+  });
+
+  testWidgets('shows units section with the three options', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    expect(find.text('Units'), findsOneWidget);
+    expect(find.text('Kilometers'), findsOneWidget);
+    expect(find.text('Miles'), findsOneWidget);
+  });
+
+  testWidgets('system units selected when there is no override',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    final group = tester
+        .widget<RadioGroup<UnitSystem?>>(find.byType(RadioGroup<UnitSystem?>));
+    expect(group.groupValue, isNull);
+  });
+
+  testWidgets('tapping Miles updates the controller and persists',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('units_mi')), 500);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('units_mi')));
+    await tester.pumpAndSettle();
+
+    expect(controller.unitsOverride, UnitSystem.imperial);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('units_override'), 'imperial');
+  });
+
+  testWidgets('tapping System default clears the units override',
+      (tester) async {
+    await setUpController({'units_override': 'imperial'});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('units_system')), 500);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('units_system')));
+    await tester.pumpAndSettle();
+
+    expect(controller.unitsOverride, isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('units_override'), isNull);
+  });
+
+  testWidgets('renders Danish units strings under the Danish locale',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+
+    expect(find.text('Enheder'), findsOneWidget);
+    expect(find.text('Kilometer'), findsOneWidget);
+    expect(find.text('Miles'), findsOneWidget);
   });
 }

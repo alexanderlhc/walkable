@@ -9,6 +9,7 @@ import 'package:walkable/main.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/settings_controller.dart';
+import 'package:walkable/units.dart';
 import 'package:walkable/walk_recorder.dart';
 
 class MockWalkRecorder extends Mock implements WalkRecorder {}
@@ -160,5 +161,53 @@ void main() {
 
     final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
     expect(app.themeMode, ThemeMode.dark);
+  });
+
+  testWidgets('selecting Miles persists the imperial override',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
+
+    await tester.pumpWidget(
+      WalkableApp(
+        recorder: recorder,
+        repository: repository,
+        settingsController: settingsController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('menu_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_button')));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('units_mi')), 500);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('units_mi')));
+    await tester.pumpAndSettle();
+
+    expect(settingsController.unitsOverride, UnitSystem.imperial);
+    expect(prefs.getString('units_override'), 'imperial');
+  });
+
+  testWidgets('starts with the imperial override when persisted',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'units_override': 'imperial'});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
+
+    await tester.pumpWidget(
+      WalkableApp(
+        recorder: recorder,
+        repository: repository,
+        settingsController: settingsController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(settingsController.unitsOverride, UnitSystem.imperial);
   });
 }

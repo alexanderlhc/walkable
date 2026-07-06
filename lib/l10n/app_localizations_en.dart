@@ -93,6 +93,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get themeDark => 'Dark';
 
   @override
+  String get settingsUnits => 'Units';
+
+  @override
+  String get unitsKilometers => 'Kilometers';
+
+  @override
+  String get unitsMiles => 'Miles';
+
+  @override
   String get locationPermissionDenied => 'Location permission denied';
 
   @override

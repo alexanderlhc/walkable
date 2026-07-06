@@ -263,6 +263,24 @@ abstract class AppLocalizations {
   /// **'Dark'**
   String get themeDark;
 
+  /// No description provided for @settingsUnits.
+  ///
+  /// In en, this message translates to:
+  /// **'Units'**
+  String get settingsUnits;
+
+  /// No description provided for @unitsKilometers.
+  ///
+  /// In en, this message translates to:
+  /// **'Kilometers'**
+  String get unitsKilometers;
+
+  /// No description provided for @unitsMiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Miles'**
+  String get unitsMiles;
+
   /// No description provided for @locationPermissionDenied.
   ///
   /// In en, this message translates to:
