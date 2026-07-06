@@ -4,6 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/settings_controller.dart';
+import 'package:walkable/units.dart';
 
 class MockSettingsRepository extends Mock implements SettingsRepository {}
 
@@ -42,6 +43,7 @@ void main() {
       final repository = MockSettingsRepository();
       when(() => repository.readThemeMode()).thenReturn(ThemeMode.system);
       when(() => repository.readLocaleCode()).thenThrow(TypeError());
+      when(() => repository.readUnitsOverride()).thenReturn(null);
       final controller = SettingsController(repository);
 
       controller.load();
@@ -147,6 +149,67 @@ void main() {
       await controller.setThemeMode(ThemeMode.dark);
 
       expect(controller.themeMode, ThemeMode.dark);
+    });
+  });
+
+  group('unitsOverride', () {
+    test('defaults to null (system) when nothing is stored', () async {
+      final controller = await buildController({});
+      controller.load();
+      expect(controller.unitsOverride, isNull);
+    });
+
+    test('restores a persisted imperial override', () async {
+      final controller = await buildController({'units_override': 'imperial'});
+      controller.load();
+      expect(controller.unitsOverride, UnitSystem.imperial);
+    });
+
+    test('unknown stored value -> system', () async {
+      final controller = await buildController({'units_override': 'nautical'});
+      controller.load();
+      expect(controller.unitsOverride, isNull);
+    });
+
+    test('type-corrupt stored value -> system', () async {
+      final controller = await buildController({'units_override': 42});
+      controller.load();
+      expect(controller.unitsOverride, isNull);
+    });
+
+    test('setUnitsOverride updates, notifies, and persists', () async {
+      final controller = await buildController({});
+      var notified = 0;
+      controller.addListener(() => notified++);
+
+      await controller.setUnitsOverride(UnitSystem.imperial);
+
+      expect(controller.unitsOverride, UnitSystem.imperial);
+      expect(notified, 1);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('units_override'), 'imperial');
+    });
+
+    test('null clears the stored value (back to system)', () async {
+      final controller = await buildController({'units_override': 'metric'});
+      controller.load();
+
+      await controller.setUnitsOverride(null);
+
+      expect(controller.unitsOverride, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('units_override'), isNull);
+    });
+
+    test('persistence failure keeps the in-memory value', () async {
+      final repository = MockSettingsRepository();
+      when(() => repository.writeUnitsOverride(any()))
+          .thenThrow(Exception('disk full'));
+      final controller = SettingsController(repository);
+
+      await controller.setUnitsOverride(UnitSystem.metric);
+
+      expect(controller.unitsOverride, UnitSystem.metric);
     });
   });
 }
