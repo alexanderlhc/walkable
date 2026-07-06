@@ -24,6 +24,21 @@ final _testWalk = Walk(
   ],
 );
 
+// A walk whose every fix shares one coordinate: LatLngBounds.fromPoints gives
+// zero-size bounds, which CameraFit.bounds cannot compute a zoom for.
+final _singlePointWalk = Walk(
+  id: 'test-2',
+  startTime: DateTime(2024, 1, 1, 10, 0, 0),
+  endTime: DateTime(2024, 1, 1, 10, 5, 0),
+  duration: const Duration(minutes: 5),
+  coordinates: [
+    Coordinate(
+        lat: 55.6761, lng: 12.5683, recordedAt: DateTime(2024, 1, 1, 10, 0, 0)),
+    Coordinate(
+        lat: 55.6761, lng: 12.5683, recordedAt: DateTime(2024, 1, 1, 10, 5, 0)),
+  ],
+);
+
 Widget _wrap(Widget child) => MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -61,5 +76,12 @@ void main() {
     await tester.pumpWidget(_wrap(WalkDetailScreen(walk: _testWalk)));
     await tester.pump();
     expect(find.textContaining('/km'), findsOneWidget);
+  });
+
+  testWidgets('renders map for walk with zero-size bounds', (tester) async {
+    await tester.pumpWidget(_wrap(WalkDetailScreen(walk: _singlePointWalk)));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(FlutterMap), findsOneWidget);
   });
 }

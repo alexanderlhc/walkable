@@ -11,6 +11,29 @@ class WalkDetailScreen extends StatelessWidget {
 
   const WalkDetailScreen({super.key, required this.walk});
 
+  // Every fix of a walk can share one coordinate (a one-point walk, or the
+  // user stood still), which makes LatLngBounds.fromPoints zero-size —
+  // flutter_map's bounds-zoom fit can't compute a zoom for those. Fall back to
+  // centring on the point at a fixed zoom instead.
+  MapOptions _mapOptions(List<LatLng> coords) {
+    if (coords.isEmpty) {
+      return const MapOptions(
+        initialCenter: LatLng(55.6761, 12.5683),
+        initialZoom: 14,
+      );
+    }
+    final bounds = LatLngBounds.fromPoints(coords);
+    if (bounds.north == bounds.south && bounds.east == bounds.west) {
+      return MapOptions(initialCenter: coords.first, initialZoom: 17);
+    }
+    return MapOptions(
+      initialCameraFit: CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(32),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final coords = walk.coordinates.map((c) => LatLng(c.lat, c.lng)).toList();
@@ -23,17 +46,7 @@ class WalkDetailScreen extends StatelessWidget {
         children: [
           Expanded(
             child: FlutterMap(
-              options: coords.isNotEmpty
-                  ? MapOptions(
-                      initialCameraFit: CameraFit.bounds(
-                        bounds: LatLngBounds.fromPoints(coords),
-                        padding: const EdgeInsets.all(32),
-                      ),
-                    )
-                  : const MapOptions(
-                      initialCenter: LatLng(55.6761, 12.5683),
-                      initialZoom: 14,
-                    ),
+              options: _mapOptions(coords),
               children: [
                 TileLayer(
                   urlTemplate: mapTileUrl(Theme.of(context).brightness),
