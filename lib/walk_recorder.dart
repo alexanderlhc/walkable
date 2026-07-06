@@ -24,6 +24,11 @@ class WalkRecorder {
   final LocationService locationService;
   final WalkRepository _repository;
 
+  /// The clock used for every time read (start/pause/resume/stop timestamps
+  /// and ticker snapshots). Injectable so tests can drive time
+  /// deterministically; production uses the real clock.
+  final DateTime Function() _now;
+
   RecorderState _state = RecorderState.idle;
   RecorderState get state => _state;
 
@@ -52,7 +57,9 @@ class WalkRecorder {
   WalkRecorder({
     required this.locationService,
     required WalkRepository repository,
-  }) : _repository = repository;
+    DateTime Function() now = DateTime.now,
+  })  : _repository = repository,
+        _now = now;
 
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
@@ -69,7 +76,7 @@ class WalkRecorder {
         return LocationServiceResult.permissionDenied;
       }
       _state = RecorderState.recording;
-      _startTime = DateTime.now();
+      _startTime = _now();
       _periodStart = _startTime;
       _id = _generateId(_startTime!);
       // Persist the walk row up front so an in-progress walk survives a kill.
@@ -83,7 +90,7 @@ class WalkRecorder {
           locationService.positions.listen(_onPosition, onError: _onError);
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (_state == RecorderState.recording) {
-          _snapshots.add(_buildSnapshot(DateTime.now()));
+          _snapshots.add(_buildSnapshot(_now()));
         }
       });
       return LocationServiceResult.started;
@@ -94,7 +101,7 @@ class WalkRecorder {
 
   Future<void> pause() async {
     if (_state != RecorderState.recording) return;
-    final now = DateTime.now();
+    final now = _now();
     _accumulatedDuration += now.difference(_periodStart!);
     _periodStart = null;
     _state = RecorderState.paused;
@@ -117,12 +124,12 @@ class WalkRecorder {
         return;
       }
       _state = RecorderState.recording;
-      _periodStart = DateTime.now();
+      _periodStart = _now();
       _subscription =
           locationService.positions.listen(_onPosition, onError: _onError);
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (_state == RecorderState.recording) {
-          _snapshots.add(_buildSnapshot(DateTime.now()));
+          _snapshots.add(_buildSnapshot(_now()));
         }
       });
     } finally {
@@ -141,7 +148,7 @@ class WalkRecorder {
     await locationService.stop();
     _state = RecorderState.stopped;
 
-    final endTime = DateTime.now();
+    final endTime = _now();
     _snapshots.add(_buildSnapshot(endTime));
 
     // Drain pending coordinate writes, then mark the walk finished with the
@@ -173,7 +180,7 @@ class WalkRecorder {
     // Emit a cleared snapshot so listeners drop the finished walk's polyline
     // instead of rendering it on the idle map (and into the next walk).
     if (!_snapshots.isClosed) {
-      _snapshots.add(_buildSnapshot(DateTime.now()));
+      _snapshots.add(_buildSnapshot(_now()));
     }
   }
 
@@ -201,7 +208,7 @@ class WalkRecorder {
     );
     final index = _coordinates.length;
     _coordinates.add(coord);
-    _snapshots.add(_buildSnapshot(DateTime.now()));
+    _snapshots.add(_buildSnapshot(_now()));
 
     // Persist this point immediately, serialized after earlier writes.
     // Best-effort: a write failure mustn't kill recording, and the point is
