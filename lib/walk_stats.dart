@@ -28,11 +28,14 @@ class WalkStats {
         duration: duration,
       );
 
-  /// Stats for a stored walk, from its persisted pause-aware [Walk.duration].
+  /// Stats for a stored walk, from its persisted pause-aware [Walk.duration]
+  /// and persisted [Walk.distanceMetres]. Walks stored before the distance
+  /// column existed fall back to computing distance from the coordinates.
   factory WalkStats.of(Walk walk) => WalkStats(
-        distanceMetres: calc.totalDistance(
-          walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList(),
-        ),
+        distanceMetres: walk.distanceMetres ??
+            calc.totalDistance(
+              walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList(),
+            ),
         duration: walk.duration,
       );
 

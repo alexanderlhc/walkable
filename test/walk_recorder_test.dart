@@ -158,7 +158,9 @@ void main() {
 
     await recorder.stop();
     final walks = await repository.findAll();
-    expect(walks[0].coordinates, isEmpty);
+    // findAll doesn't hydrate coordinates; check the full walk.
+    final walk = await repository.findById(walks[0].id);
+    expect(walk!.coordinates, isEmpty);
   });
 
   test('elapsed does not grow during pause gap', () async {
@@ -206,12 +208,18 @@ void main() {
 
     final walks = await repository.findAll();
     expect(walks.length, 1);
-    expect(walks[0].coordinates.length, 2);
     expect(walks[0].endTime, isNotNull);
     // The persisted duration is the canonical pause-aware moving time — the
     // same value shown in the final emitted snapshot, not endTime - startTime.
     expect(walks[0].duration, isNotNull);
     expect(walks[0].duration!.inMilliseconds,
         stopSnapshots.single.stats.duration!.inMilliseconds);
+    // The route distance is persisted on finish so the history list can show
+    // it without loading the coordinates findAll deliberately skips.
+    expect(walks[0].coordinates, isEmpty);
+    expect(walks[0].distanceMetres, stopSnapshots.single.stats.distanceMetres);
+
+    final full = await repository.findById(walks[0].id);
+    expect(full!.coordinates.length, 2);
   });
 }

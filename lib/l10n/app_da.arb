@@ -16,6 +16,8 @@
   "paceUnavailable": "--:--",
   "durationUnavailable": "--",
   "historyEmpty": "Ingen gåture endnu",
+  "historyLoadError": "Kunne ikke indlæse dine gåture",
+  "actionRetry": "Prøv igen",
   "screenWalkDetail": "Gåtur",
   "locationPermissionDenied": "Placeringstilladelse nægtet",
   "backgroundTrackingWarning": "Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.",

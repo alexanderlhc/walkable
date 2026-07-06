@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -122,13 +125,154 @@ void main() {
 
     test('finishWalk records the end time and pause-aware duration', () async {
       await repository.createWalk('done', DateTime(2026, 6, 1, 9, 0));
-      await repository.finishWalk(
-          'done', DateTime(2026, 6, 1, 9, 30), const Duration(minutes: 25));
+      await repository.finishWalk('done', DateTime(2026, 6, 1, 9, 30),
+          const Duration(minutes: 25), 1250.0);
 
       final found = await repository.findById('done');
       expect(found!.endTime, DateTime(2026, 6, 1, 9, 30));
       // 25 min moving time, not the 30 min wall-clock span.
       expect(found.duration, const Duration(minutes: 25));
+      expect(found.distanceMetres, 1250.0);
+    });
+
+    test('findAll excludes unfinished walks; findById still returns them',
+        () async {
+      await repository.createWalk('in-progress', DateTime(2026, 6, 1, 9, 0));
+      await repository.save(Walk(
+        id: 'finished',
+        startTime: DateTime(2026, 6, 1, 8, 0),
+        endTime: DateTime(2026, 6, 1, 8, 30),
+      ));
+
+      // The history list only shows finished walks — an in-progress (or
+      // orphaned) walk has no end time and must not appear.
+      final walks = await repository.findAll();
+      expect(walks.map((w) => w.id), ['finished']);
+
+      // Direct lookup still works, e.g. for crash recovery.
+      final found = await repository.findById('in-progress');
+      expect(found, isNotNull);
+      expect(found!.endTime, isNull);
+    });
+  });
+
+  group('stored distance', () {
+    test('findAll reads persisted distance without hydrating coordinates',
+        () async {
+      await repository.createWalk('walked', DateTime(2026, 6, 1, 9, 0));
+      await repository.appendCoordinate(
+          'walked',
+          Coordinate(
+              lat: 55.676, lng: 12.568, recordedAt: DateTime(2026, 6, 1, 9, 0)),
+          0);
+      await repository.appendCoordinate(
+          'walked',
+          Coordinate(
+              lat: 55.677, lng: 12.569, recordedAt: DateTime(2026, 6, 1, 9, 5)),
+          1);
+      await repository.finishWalk('walked', DateTime(2026, 6, 1, 9, 30),
+          const Duration(minutes: 25), 127.5);
+
+      final walks = await repository.findAll();
+      expect(walks.single.distanceMetres, 127.5);
+      // The list query deliberately skips the coordinates.
+      expect(walks.single.coordinates, isEmpty);
+
+      // The detail lookup still hydrates the full route.
+      final full = await repository.findById('walked');
+      expect(full!.coordinates.length, 2);
+      expect(full.distanceMetres, 127.5);
+    });
+
+    test('save computes and persists distance from coordinates', () async {
+      final walk = Walk(
+        id: 'walk-dist',
+        startTime: DateTime(2026, 6, 1, 9, 0),
+        endTime: DateTime(2026, 6, 1, 9, 30),
+        coordinates: [
+          Coordinate(
+              lat: 55.676, lng: 12.568, recordedAt: DateTime(2026, 6, 1, 9, 0)),
+          Coordinate(
+              lat: 55.677,
+              lng: 12.569,
+              recordedAt: DateTime(2026, 6, 1, 9, 15)),
+        ],
+      );
+
+      await repository.save(walk);
+      final walks = await repository.findAll();
+
+      // ~128 m between the two fixes (haversine).
+      expect(walks.single.distanceMetres, closeTo(128, 5));
+    });
+  });
+
+  group('schema migration', () {
+    test('v2 → v3 backfills distance from stored coordinates', () async {
+      final dir = await Directory.systemTemp.createTemp('walkable_test');
+      final path = p.join(dir.path, 'walkable.db');
+
+      // Build a v2 database by hand: no distance column yet.
+      final v2 = await databaseFactory.openDatabase(
+        path,
+        options: OpenDatabaseOptions(
+          version: 2,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE walks (
+                id TEXT PRIMARY KEY,
+                start_time INTEGER NOT NULL,
+                end_time INTEGER,
+                duration_ms INTEGER
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE coordinates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                walk_id TEXT NOT NULL,
+                lat REAL NOT NULL,
+                lng REAL NOT NULL,
+                recorded_at INTEGER NOT NULL,
+                sequence_index INTEGER NOT NULL,
+                FOREIGN KEY (walk_id) REFERENCES walks (id)
+              )
+            ''');
+          },
+        ),
+      );
+      await v2.insert('walks', {
+        'id': 'legacy',
+        'start_time': DateTime(2026, 5, 1, 8, 0).millisecondsSinceEpoch,
+        'end_time': DateTime(2026, 5, 1, 8, 45).millisecondsSinceEpoch,
+        'duration_ms': const Duration(minutes: 40).inMilliseconds,
+      });
+      await v2.insert('coordinates', {
+        'walk_id': 'legacy',
+        'lat': 55.676,
+        'lng': 12.568,
+        'recorded_at': DateTime(2026, 5, 1, 8, 0).millisecondsSinceEpoch,
+        'sequence_index': 0,
+      });
+      await v2.insert('coordinates', {
+        'walk_id': 'legacy',
+        'lat': 55.677,
+        'lng': 12.569,
+        'recorded_at': DateTime(2026, 5, 1, 8, 30).millisecondsSinceEpoch,
+        'sequence_index': 1,
+      });
+      await v2.close();
+
+      // Reopening through the repository runs the v3 upgrade.
+      final migrated = await WalkRepository.open(path);
+      addTearDown(() async {
+        await migrated.close();
+        await dir.delete(recursive: true);
+      });
+
+      final walks = await migrated.findAll();
+      // ~128 m between the two fixes, backfilled from the coordinates.
+      expect(walks.single.distanceMetres, closeTo(128, 5));
+      expect(walks.single.duration, const Duration(minutes: 40));
     });
   });
 

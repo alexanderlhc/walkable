@@ -25,6 +25,21 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
     _walksFuture = widget.repository.findAll();
   }
 
+  void _retry() {
+    setState(() {
+      _walksFuture = widget.repository.findAll();
+    });
+  }
+
+  /// The list is loaded without coordinates; hydrate the full route before
+  /// showing the detail screen.
+  Future<void> _openDetail(Walk walk) async {
+    final navigator = Navigator.of(context);
+    final full = await widget.repository.findById(walk.id) ?? walk;
+    if (!mounted) return;
+    navigator.pushNamed('/walk-detail', arguments: full);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -33,6 +48,21 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
       body: FutureBuilder<List<Walk>>(
         future: _walksFuture,
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(l10n.historyLoadError),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: _retry,
+                    child: Text(l10n.actionRetry),
+                  ),
+                ],
+              ),
+            );
+          }
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -48,8 +78,7 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
               final walk = walks[index];
               return _WalkCard(
                 walk: walk,
-                onTap: () => Navigator.of(context)
-                    .pushNamed('/walk-detail', arguments: walk),
+                onTap: () => _openDetail(walk),
               );
             },
           );
@@ -59,7 +88,8 @@ class _WalkHistoryScreenState extends State<WalkHistoryScreen> {
   }
 }
 
-/// A walk in the history feed: the recorded route rendered large, with the
+/// A walk in the history feed: the route sketch area (walks from the list are
+/// loaded without coordinates, so this renders the placeholder mark), with the
 /// date and the headline stats (distance, duration, pace) beneath it.
 class _WalkCard extends StatelessWidget {
   final Walk walk;

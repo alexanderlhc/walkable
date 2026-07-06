@@ -16,6 +16,8 @@
   "paceUnavailable": "--:--",
   "durationUnavailable": "--",
   "historyEmpty": "No walks yet",
+  "historyLoadError": "Couldn't load your walks",
+  "actionRetry": "Try again",
   "screenWalkDetail": "Walk Detail",
   "locationPermissionDenied": "Location permission denied",
   "backgroundTrackingWarning": "Notifications are off, so your walk may stop recording when the screen is locked.",

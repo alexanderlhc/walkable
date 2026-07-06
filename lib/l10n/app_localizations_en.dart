@@ -57,6 +57,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get historyEmpty => 'No walks yet';
 
   @override
+  String get historyLoadError => 'Couldn\'t load your walks';
+
+  @override
+  String get actionRetry => 'Try again';
+
+  @override
   String get screenWalkDetail => 'Walk Detail';
 
   @override

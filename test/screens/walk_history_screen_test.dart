@@ -65,7 +65,8 @@ void main() {
     expect(find.byType(Card), findsNWidgets(2));
   });
 
-  testWidgets('tapping a row navigates to walk detail', (tester) async {
+  testWidgets('tapping a row hydrates the walk and navigates to detail',
+      (tester) async {
     when(() => mockRepository.findAll()).thenAnswer((_) async => [
           Walk(
             id: 'w1',
@@ -73,6 +74,18 @@ void main() {
             endTime: DateTime(2026, 6, 1, 9, 30),
           ),
         ]);
+    // The list walk carries no coordinates; the detail route is re-fetched.
+    when(() => mockRepository.findById('w1')).thenAnswer((_) async => Walk(
+          id: 'w1',
+          startTime: DateTime(2026, 6, 1, 9, 0),
+          endTime: DateTime(2026, 6, 1, 9, 30),
+          coordinates: [
+            Coordinate(
+                lat: 55.676,
+                lng: 12.568,
+                recordedAt: DateTime(2026, 6, 1, 9, 0)),
+          ],
+        ));
 
     await tester.pumpWidget(buildSubject());
     await tester.pump();
@@ -81,5 +94,44 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Walk Detail'), findsOneWidget);
+    verify(() => mockRepository.findById('w1')).called(1);
+  });
+
+  testWidgets('renders the stored distance without coordinates',
+      (tester) async {
+    when(() => mockRepository.findAll()).thenAnswer((_) async => [
+          Walk(
+            id: 'w1',
+            startTime: DateTime(2026, 6, 1, 9, 0),
+            endTime: DateTime(2026, 6, 1, 9, 30),
+            duration: const Duration(minutes: 25),
+            distanceMetres: 1234.5,
+          ),
+        ]);
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    expect(find.text('1.23 km'), findsOneWidget);
+  });
+
+  testWidgets('shows an error state with retry when loading fails',
+      (tester) async {
+    when(() => mockRepository.findAll())
+        .thenAnswer((_) async => throw Exception('db is corrupt'));
+
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    expect(find.text("Couldn't load your walks"), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // Retry re-runs findAll; let it succeed this time.
+    when(() => mockRepository.findAll()).thenAnswer((_) async => []);
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('No walks yet'), findsOneWidget);
   });
 }
