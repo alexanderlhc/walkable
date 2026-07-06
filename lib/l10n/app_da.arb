@@ -28,6 +28,9 @@
   "settingsTheme": "Tema",
   "themeLight": "Lyst",
   "themeDark": "Mørkt",
+  "settingsUnits": "Enheder",
+  "unitsKilometers": "Kilometer",
+  "unitsMiles": "Miles",
   "locationPermissionDenied": "Placeringstilladelse nægtet",
   "backgroundTrackingWarning": "Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.",
   "batteryOptimizationWarning": "Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.",
@@ -39,5 +42,6 @@
   "walksRecovered": "{count, plural, =1{En afbrudt gåtur blev gendannet til din historik} other{{count} afbrudte gåture blev gendannet til din historik}}",
   "notificationTitle": "Gåtur i gang",
   "notificationText": "Walkable registrerer din gåtur",
-  "unitKm": "{value} km"
+  "unitKm": "{value} km",
+  "unitMi": "{value} mi"
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/repository/settings_repository.dart';
+import 'package:walkable/units.dart';
 
 /// App-level user settings. Null [localeOverride] means "follow the system".
 class SettingsController extends ChangeNotifier {
@@ -8,12 +9,15 @@ class SettingsController extends ChangeNotifier {
 
   Locale? _localeOverride;
   ThemeMode _themeMode = ThemeMode.system;
+  UnitSystem? _unitsOverride;
 
   SettingsController(this.repository);
 
   Locale? get localeOverride => _localeOverride;
 
   ThemeMode get themeMode => _themeMode;
+
+  UnitSystem? get unitsOverride => _unitsOverride;
 
   /// Restores the persisted override. A code we no longer support (or
   /// corrupt data) degrades to following the system rather than crashing.
@@ -22,6 +26,7 @@ class SettingsController extends ChangeNotifier {
   /// (main() calls it before runApp), so there are no listeners yet.
   void load() {
     _themeMode = repository.readThemeMode();
+    _unitsOverride = repository.readUnitsOverride();
     String? code;
     try {
       code = repository.readLocaleCode();
@@ -50,6 +55,17 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
     try {
       await repository.writeThemeMode(mode);
+    } catch (_) {
+      // The choice still applies this session; it just won't survive a
+      // restart.
+    }
+  }
+
+  Future<void> setUnitsOverride(UnitSystem? units) async {
+    _unitsOverride = units;
+    notifyListeners();
+    try {
+      await repository.writeUnitsOverride(units);
     } catch (_) {
       // The choice still applies this session; it just won't survive a
       // restart.

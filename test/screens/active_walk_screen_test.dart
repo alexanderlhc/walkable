@@ -352,6 +352,11 @@ void main() {
 
   testWidgets('stats section shown when recorder emits a snapshot',
       (tester) async {
+    // Pin the device locale to a metric one: flutter test's default platform
+    // locale is en_US (imperial), which would otherwise make this assertion
+    // depend on the host environment's locale.
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
     await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
@@ -404,6 +409,59 @@ void main() {
 
     expect(find.text('RECORDING'), findsNothing);
     expect(find.text('PAUSED'), findsNothing);
+  });
+
+  testWidgets('bottom panel shows mi units under the imperial override',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'units_override': 'imperial'});
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    when(() => recorder.state).thenReturn(RecorderState.recording);
+
+    snapshotsCtrl.add(WalkSnapshot(
+      stats: const WalkStats(
+        distanceMetres: 1609.344,
+        duration: Duration(minutes: 16),
+      ),
+      polyline: const [
+        (lat: 55.676, lng: 12.568),
+        (lat: 55.677, lng: 12.569),
+      ],
+    ));
+    await tester.pumpAndSettle();
+
+    // The value and unit render as sibling TextSpans inside one RichText
+    // (_StatBlock), so the whole widget's plain text is e.g. "1.00 mi" —
+    // find.text (exact match) never matches "1.00" alone. textContaining
+    // with findRichText: true is the reliable form here (see brief's note).
+    expect(find.textContaining('1.00', findRichText: true), findsOneWidget);
+    expect(find.textContaining('mi', findRichText: true), findsWidgets);
+    expect(find.textContaining('/mi', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('system default units follow the device locale', (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    when(() => recorder.state).thenReturn(RecorderState.recording);
+
+    snapshotsCtrl.add(WalkSnapshot(
+      stats: const WalkStats(
+        distanceMetres: 1609.344,
+        duration: Duration(minutes: 16),
+      ),
+      polyline: const [
+        (lat: 55.676, lng: 12.568),
+        (lat: 55.677, lng: 12.569),
+      ],
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('/mi', findRichText: true), findsOneWidget);
   });
 
   // ─── stop ──────────────────────────────────────────────────────────────────

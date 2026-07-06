@@ -28,6 +28,9 @@
   "settingsTheme": "Theme",
   "themeLight": "Light",
   "themeDark": "Dark",
+  "settingsUnits": "Units",
+  "unitsKilometers": "Kilometers",
+  "unitsMiles": "Miles",
   "locationPermissionDenied": "Location permission denied",
   "backgroundTrackingWarning": "Notifications are off, so your walk may stop recording when the screen is locked.",
   "batteryOptimizationWarning": "Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.",
@@ -51,6 +54,12 @@
   "notificationText": "Walkable is recording your walk",
   "unitKm": "{value} km",
   "@unitKm": {
+    "placeholders": {
+      "value": { "type": "String" }
+    }
+  },
+  "unitMi": "{value} mi",
+  "@unitMi": {
     "placeholders": {
       "value": { "type": "String" }
     }
