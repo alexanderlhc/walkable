@@ -1,3 +1,5 @@
+import 'package:walkable/walk_calculator.dart' show Coord;
+
 class Coordinate {
   final double lat;
   final double lng;
@@ -27,6 +29,11 @@ class Walk {
   /// [coordinates]).
   final double? distanceMetres;
 
+  /// The simplified route (Douglas–Peucker, capped), persisted on finish so
+  /// list views can draw a mini map preview without loading every coordinate.
+  /// Null for walks stored before the route column existed.
+  final List<Coord>? route;
+
   /// The recorded route. May be empty on walks loaded for list views —
   /// [WalkRepository.findAll] deliberately skips coordinate hydration; use
   /// [WalkRepository.findById] for the full route.
@@ -38,6 +45,7 @@ class Walk {
     this.endTime,
     this.duration,
     this.distanceMetres,
+    this.route,
     this.coordinates = const [],
   });
 }

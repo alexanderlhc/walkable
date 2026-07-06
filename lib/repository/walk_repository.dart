@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/walk_calculator.dart' as calc;
@@ -10,7 +12,7 @@ class WalkRepository {
   static Future<WalkRepository> inMemory() async {
     final db = await openDatabase(
       ':memory:',
-      version: 3,
+      version: 4,
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
     );
@@ -20,7 +22,7 @@ class WalkRepository {
   static Future<WalkRepository> open(String path) async {
     final db = await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createSchema,
       onUpgrade: _upgradeSchema,
     );
@@ -59,6 +61,36 @@ class WalkRepository {
         );
       }
     }
+    // v4 adds the simplified route (JSON [[lat,lng],...]) so history cards can
+    // draw a mini map preview without hydrating the coordinates. Backfill
+    // finished walks from their stored coordinates.
+    if (oldVersion < 4) {
+      await db.execute('ALTER TABLE walks ADD COLUMN route TEXT');
+      final walkRows = await db.query(
+        'walks',
+        columns: ['id'],
+        where: 'end_time IS NOT NULL',
+      );
+      for (final row in walkRows) {
+        final walkId = row['id'] as String;
+        final coordRows = await db.query(
+          'coordinates',
+          columns: ['lat', 'lng'],
+          where: 'walk_id = ?',
+          whereArgs: [walkId],
+          orderBy: 'sequence_index ASC',
+        );
+        final coords = coordRows
+            .map((c) => (lat: c['lat'] as double, lng: c['lng'] as double))
+            .toList();
+        await db.update(
+          'walks',
+          {'route': _encodeRoute(calc.simplifyRoute(coords))},
+          where: 'id = ?',
+          whereArgs: [walkId],
+        );
+      }
+    }
   }
 
   static Future<void> _createSchema(Database db, int version) async {
@@ -68,7 +100,8 @@ class WalkRepository {
         start_time INTEGER NOT NULL,
         end_time INTEGER,
         duration_ms INTEGER,
-        distance REAL
+        distance REAL,
+        route TEXT
       )
     ''');
     await db.execute('''
@@ -113,16 +146,18 @@ class WalkRepository {
   }
 
   /// Marks a walk finished by recording its end time, the pause-aware moving
-  /// [duration] accumulated during recording, and the total route
-  /// [distanceMetres], persisted so list queries never need the coordinates.
+  /// [duration] accumulated during recording, the total route
+  /// [distanceMetres], and the simplified [route] for the history preview —
+  /// all persisted so list queries never need the coordinates.
   Future<void> finishWalk(String walkId, DateTime endTime, Duration duration,
-      double distanceMetres) async {
+      double distanceMetres, List<calc.Coord> route) async {
     await _db.update(
       'walks',
       {
         'end_time': endTime.millisecondsSinceEpoch,
         'duration_ms': duration.inMilliseconds,
         'distance': distanceMetres,
+        'route': _encodeRoute(route),
       },
       where: 'id = ?',
       whereArgs: [walkId],
@@ -142,6 +177,10 @@ class WalkRepository {
               calc.totalDistance(
                 walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList(),
               ),
+          'route': _encodeRoute(walk.route ??
+              calc.simplifyRoute(
+                walk.coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList(),
+              )),
         },
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
@@ -220,8 +259,21 @@ class WalkRepository {
           : null,
       duration: durationMs != null ? Duration(milliseconds: durationMs) : null,
       distanceMetres: (row['distance'] as num?)?.toDouble(),
+      route: _decodeRoute(row['route'] as String?),
       coordinates: coordinates,
     );
+  }
+
+  /// The route column format: a JSON array of `[lat, lng]` pairs.
+  static String _encodeRoute(List<calc.Coord> route) =>
+      jsonEncode([for (final c in route) [c.lat, c.lng]]);
+
+  static List<calc.Coord>? _decodeRoute(String? json) {
+    if (json == null) return null;
+    return [
+      for (final pair in jsonDecode(json) as List)
+        (lat: (pair[0] as num).toDouble(), lng: (pair[1] as num).toDouble()),
+    ];
   }
 
   Future<void> close() => _db.close();
