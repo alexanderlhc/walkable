@@ -38,6 +38,12 @@
       "error": { "type": "String" }
     }
   },
+  "walksRecovered": "{count, plural, =1{Recovered an interrupted walk to your history} other{Recovered {count} interrupted walks to your history}}",
+  "@walksRecovered": {
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "notificationTitle": "Walk in progress",
   "notificationText": "Walkable is recording your walk",
   "unitKm": "{value} km",

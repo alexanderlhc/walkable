@@ -110,6 +110,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String walksRecovered(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Recovered $count interrupted walks to your history',
+      one: 'Recovered an interrupted walk to your history',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get notificationTitle => 'Walk in progress';
 
   @override

@@ -293,6 +293,12 @@ abstract class AppLocalizations {
   /// **'Could not get location: {error}'**
   String locationError(String error);
 
+  /// No description provided for @walksRecovered.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Recovered an interrupted walk to your history} other{Recovered {count} interrupted walks to your history}}'**
+  String walksRecovered(int count);
+
   /// No description provided for @notificationTitle.
   ///
   /// In en, this message translates to:

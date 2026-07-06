@@ -21,6 +21,11 @@ class WalkSnapshot {
 }
 
 class WalkRecorder {
+  /// How much recording time may pass between periodic duration writes. The
+  /// pause-aware duration lives only in memory, so these throttled writes are
+  /// what crash recovery falls back on — see [WalkRepository.recoverOrphans].
+  static const progressPersistInterval = Duration(seconds: 30);
+
   final LocationService locationService;
   final WalkRepository _repository;
 
@@ -41,6 +46,10 @@ class WalkRecorder {
   String? _id;
   DateTime? _startTime;
   DateTime? _periodStart;
+  // When the pause-aware duration was last written to the walk row, per the
+  // injected clock; throttles the ticker's progress writes to one per
+  // [progressPersistInterval] instead of one per tick.
+  DateTime? _lastProgressPersist;
   Duration _accumulatedDuration = Duration.zero;
   final List<Coordinate> _coordinates = [];
   StreamSubscription<Position>? _subscription;
@@ -86,13 +95,10 @@ class WalkRecorder {
       _persist = _repository.createWalk(_id!, _startTime!).catchError((Object e) {
         debugPrint('WalkRecorder: failed to persist walk $_id: $e');
       });
+      _lastProgressPersist = _startTime;
       _subscription =
           locationService.positions.listen(_onPosition, onError: _onError);
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (_state == RecorderState.recording) {
-          _snapshots.add(_buildSnapshot(_now()));
-        }
-      });
+      _startTicker();
       return LocationServiceResult.started;
     } finally {
       _starting = false;
@@ -110,6 +116,11 @@ class WalkRecorder {
     await _subscription?.cancel();
     _subscription = null;
     await locationService.stop();
+    // Persist the pause-aware duration now that it just grew: pauses are the
+    // moments where wall-clock inference would drift furthest, so this write
+    // is what keeps a later crash recovery honest.
+    _lastProgressPersist = now;
+    _persistProgress(now);
     _snapshots.add(_buildSnapshot(now));
   }
 
@@ -127,14 +138,43 @@ class WalkRecorder {
       _periodStart = _now();
       _subscription =
           locationService.positions.listen(_onPosition, onError: _onError);
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (_state == RecorderState.recording) {
-          _snapshots.add(_buildSnapshot(_now()));
-        }
-      });
+      _startTicker();
     } finally {
       _starting = false;
     }
+  }
+
+  /// The 1-second snapshot ticker shared by start() and resume(). Also drives
+  /// the periodic progress persistence, throttled to one write per
+  /// [progressPersistInterval] of recording.
+  void _startTicker() {
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (_state != RecorderState.recording) return;
+      final now = _now();
+      _snapshots.add(_buildSnapshot(now));
+      final lastPersist = _lastProgressPersist;
+      if (lastPersist == null ||
+          now.difference(lastPersist) >= progressPersistInterval) {
+        _lastProgressPersist = now;
+        _persistProgress(now);
+      }
+    });
+  }
+
+  /// Writes the pause-aware duration as of [now] to the walk row, serialized
+  /// on the persistence chain. Best-effort like the coordinate writes: a
+  /// failure is logged and must never disturb recording or wedge stop().
+  void _persistProgress(DateTime now) {
+    final id = _id;
+    if (id == null) return;
+    final duration = _elapsedAt(now);
+    _persist = _persist.then((_) async {
+      try {
+        await _repository.updateProgress(id, duration);
+      } catch (e) {
+        debugPrint('WalkRecorder: failed to persist progress for $id: $e');
+      }
+    });
   }
 
   Future<void> stop() async {
@@ -174,6 +214,7 @@ class WalkRecorder {
     _id = null;
     _startTime = null;
     _periodStart = null;
+    _lastProgressPersist = null;
     _accumulatedDuration = Duration.zero;
     _coordinates.clear();
     _persist = Future<void>.value();

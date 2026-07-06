@@ -24,6 +24,15 @@ void main() async {
   }
   final dbPath = p.join(await getDatabasesPath(), 'walkable.db');
   final repository = await WalkRepository.open(dbPath);
+  // Salvage walks orphaned by a mid-walk process death before the UI can
+  // query the repository. Best-effort: a recovery failure must not stop the
+  // app from launching.
+  var recoveredWalks = 0;
+  try {
+    recoveredWalks = await repository.recoverOrphans();
+  } catch (e) {
+    debugPrint('main: orphaned-walk recovery failed: $e');
+  }
   final locationService = LocationService();
   final recorder = WalkRecorder(
     locationService: locationService,
@@ -36,6 +45,7 @@ void main() async {
     recorder: recorder,
     repository: repository,
     settingsController: settingsController,
+    recoveredWalkCount: recoveredWalks,
   ));
 }
 
@@ -44,11 +54,16 @@ class WalkableApp extends StatelessWidget {
   final WalkRepository repository;
   final SettingsController settingsController;
 
+  /// How many orphaned walks startup recovery salvaged into the history; the
+  /// main screen announces them once when the count is positive.
+  final int recoveredWalkCount;
+
   const WalkableApp({
     super.key,
     required this.recorder,
     required this.repository,
     required this.settingsController,
+    this.recoveredWalkCount = 0,
   });
 
   @override
@@ -89,6 +104,7 @@ class WalkableApp extends StatelessWidget {
           recorder: recorder,
           repository: repository,
           settingsController: settingsController,
+          recoveredWalkCount: recoveredWalkCount,
         ),
       ),
     );

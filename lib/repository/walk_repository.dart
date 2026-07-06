@@ -164,6 +164,78 @@ class WalkRepository {
     );
   }
 
+  /// Persists the pause-aware moving [duration] accumulated so far on a walk
+  /// that is still being recorded. The duration lives only in the recorder's
+  /// memory (coordinate gaps can't reconstruct it — GPS distance filters make
+  /// stationary indistinguishable from paused), so periodic writes are what
+  /// make it recoverable after a mid-walk process death. Guarded to unfinished
+  /// rows so a late throttled write can never clobber a finished walk.
+  Future<void> updateProgress(String id, Duration duration) async {
+    await _db.update(
+      'walks',
+      {'duration_ms': duration.inMilliseconds},
+      where: 'id = ? AND end_time IS NULL',
+      whereArgs: [id],
+    );
+  }
+
+  /// Salvages walks orphaned by a mid-walk process death: rows created by
+  /// [createWalk] that never reached [finishWalk]. Runs once at startup,
+  /// before any recording begins, so every unfinished row is an orphan.
+  ///
+  /// Orphans with fewer than two coordinates carry no route worth keeping and
+  /// are deleted. The rest are finished in place with the same derived values
+  /// [finishWalk] would have written: end time = the last fix's recorded_at,
+  /// distance and simplified route computed from the stored coordinates, and
+  /// duration = the last persisted [updateProgress] value when present,
+  /// falling back to the start-to-last-fix wall-clock span.
+  ///
+  /// Returns the number of walks recovered (deletions don't count).
+  Future<int> recoverOrphans() async {
+    final orphanRows = await _db.query('walks', where: 'end_time IS NULL');
+    var recovered = 0;
+    for (final row in orphanRows) {
+      final walkId = row['id'] as String;
+      await _db.transaction((txn) async {
+        final coordRows = await txn.query(
+          'coordinates',
+          columns: ['lat', 'lng', 'recorded_at'],
+          where: 'walk_id = ?',
+          whereArgs: [walkId],
+          orderBy: 'sequence_index ASC',
+        );
+
+        if (coordRows.length < 2) {
+          await txn.delete('coordinates',
+              where: 'walk_id = ?', whereArgs: [walkId]);
+          await txn.delete('walks', where: 'id = ?', whereArgs: [walkId]);
+          return;
+        }
+
+        final coords = coordRows
+            .map((c) => (lat: c['lat'] as double, lng: c['lng'] as double))
+            .toList();
+        final lastRecordedAt = coordRows.last['recorded_at'] as int;
+        final durationMs = row['duration_ms'] as int? ??
+            lastRecordedAt - (row['start_time'] as int);
+
+        await txn.update(
+          'walks',
+          {
+            'end_time': lastRecordedAt,
+            'duration_ms': durationMs,
+            'distance': calc.totalDistance(coords),
+            'route': _encodeRoute(calc.simplifyRoute(coords)),
+          },
+          where: 'id = ?',
+          whereArgs: [walkId],
+        );
+        recovered++;
+      });
+    }
+    return recovered;
+  }
+
   Future<void> save(Walk walk) async {
     await _db.transaction((txn) async {
       await txn.insert(
