@@ -14,8 +14,16 @@ class SettingsController extends ChangeNotifier {
 
   /// Restores the persisted override. A code we no longer support (or
   /// corrupt data) degrades to following the system rather than crashing.
+  ///
+  /// Deliberately doesn't notify: this must run before the first build
+  /// (main() calls it before runApp), so there are no listeners yet.
   void load() {
-    final code = repository.readLocaleCode();
+    String? code;
+    try {
+      code = repository.readLocaleCode();
+    } catch (_) {
+      return; // corrupt/typed data -> follow system
+    }
     if (code == null) return;
     final supported = AppLocalizations.supportedLocales
         .any((locale) => locale.languageCode == code);

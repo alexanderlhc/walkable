@@ -67,6 +67,19 @@ void main() {
     expect(prefs.getString('locale_override'), 'da');
   });
 
+  testWidgets('tapping English updates the controller and persists',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.tap(find.byKey(const Key('language_en')));
+    await tester.pumpAndSettle();
+
+    expect(controller.localeOverride, const Locale('en'));
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('locale_override'), 'en');
+  });
+
   testWidgets('tapping System default clears the override', (tester) async {
     await setUpController({'locale_override': 'da'});
     await tester.pumpWidget(buildSubject());

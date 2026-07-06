@@ -35,6 +35,16 @@ void main() {
       controller.load();
       expect(controller.localeOverride, isNull);
     });
+
+    test('read failure -> follows system', () {
+      final repository = MockSettingsRepository();
+      when(() => repository.readLocaleCode()).thenThrow(TypeError());
+      final controller = SettingsController(repository);
+
+      controller.load();
+
+      expect(controller.localeOverride, isNull);
+    });
   });
 
   group('setLocaleOverride', () {
