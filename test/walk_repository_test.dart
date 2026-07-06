@@ -406,6 +406,97 @@ void main() {
       // The list still doesn't hydrate coordinates.
       expect(walks.single.coordinates, isEmpty);
     });
+
+    test('migrating from v1 yields the same schema as a fresh onCreate',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('walkable_test');
+      addTearDown(() => dir.delete(recursive: true));
+
+      // Describes every user table and index of the database at [path]:
+      // object names from sqlite_master plus, per table, each column's
+      // name/type/notnull/default/pk from PRAGMA table_info. Ordering and
+      // whitespace are normalized so only real schema differences compare
+      // unequal.
+      Future<Map<String, Object?>> describeSchema(String path) async {
+        final db = await databaseFactory.openDatabase(path);
+        try {
+          final master = await db.rawQuery(
+            "SELECT type, name, tbl_name FROM sqlite_master "
+            "WHERE type IN ('table', 'index') AND name NOT LIKE 'sqlite_%' "
+            "ORDER BY type, name",
+          );
+          final objects = [
+            for (final row in master)
+              '${row['type']}:${row['name']} (on ${row['tbl_name']})',
+          ];
+
+          final tables = <String, Map<String, Object?>>{};
+          for (final row in master.where((r) => r['type'] == 'table')) {
+            final table = row['name'] as String;
+            final columns = await db.rawQuery('PRAGMA table_info("$table")');
+            tables[table] = {
+              for (final col in columns)
+                col['name'] as String: {
+                  'type': (col['type'] as String)
+                      .toUpperCase()
+                      .replaceAll(RegExp(r'\s+'), ' ')
+                      .trim(),
+                  'notnull': col['notnull'],
+                  'dflt_value': col['dflt_value'],
+                  'pk': col['pk'],
+                },
+            };
+          }
+          return {'objects': objects, 'tables': tables};
+        } finally {
+          await db.close();
+        }
+      }
+
+      // One database starts at v1 — the oldest schema the migration chain
+      // supports (walks without duration_ms/distance/route) — and upgrades
+      // through every migration to the current version.
+      final migratedPath = p.join(dir.path, 'migrated.db');
+      final v1 = await databaseFactory.openDatabase(
+        migratedPath,
+        options: OpenDatabaseOptions(
+          version: 1,
+          onCreate: (db, version) async {
+            await db.execute('''
+              CREATE TABLE walks (
+                id TEXT PRIMARY KEY,
+                start_time INTEGER NOT NULL,
+                end_time INTEGER
+              )
+            ''');
+            await db.execute('''
+              CREATE TABLE coordinates (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                walk_id TEXT NOT NULL,
+                lat REAL NOT NULL,
+                lng REAL NOT NULL,
+                recorded_at INTEGER NOT NULL,
+                sequence_index INTEGER NOT NULL,
+                FOREIGN KEY (walk_id) REFERENCES walks (id)
+              )
+            ''');
+          },
+        ),
+      );
+      await v1.close();
+      final migrated = await WalkRepository.open(migratedPath);
+      await migrated.close();
+
+      // The other database is created fresh at the current version.
+      final freshPath = p.join(dir.path, 'fresh.db');
+      final fresh = await WalkRepository.open(freshPath);
+      await fresh.close();
+
+      // If these diverge, onCreate has drifted from the migration chain and
+      // new installs get a different schema than upgraded ones.
+      expect(await describeSchema(migratedPath),
+          equals(await describeSchema(freshPath)));
+    });
   });
 
   test('save round-trips the pause-aware duration', () async {
