@@ -113,4 +113,52 @@ void main() {
     // History menu item renders in Danish
     expect(find.text('Tidligere gåture'), findsOneWidget);
   });
+
+  testWidgets('selecting Dark switches the app theme immediately',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
+
+    await tester.pumpWidget(
+      WalkableApp(
+        recorder: recorder,
+        repository: repository,
+        settingsController: settingsController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('menu_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('settings_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('theme_dark')));
+    await tester.pumpAndSettle();
+
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.themeMode, ThemeMode.dark);
+    expect(prefs.getString('theme_mode'), 'dark');
+  });
+
+  testWidgets('starts dark when a dark override was persisted',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'theme_mode': 'dark'});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
+
+    await tester.pumpWidget(
+      WalkableApp(
+        recorder: recorder,
+        repository: repository,
+        settingsController: settingsController,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.themeMode, ThemeMode.dark);
+  });
 }
