@@ -94,6 +94,17 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String walksRecovered(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count afbrudte gåture blev gendannet til din historik',
+      one: 'En afbrudt gåtur blev gendannet til din historik',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get notificationTitle => 'Gåtur i gang';
 
   @override

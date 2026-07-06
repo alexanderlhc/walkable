@@ -50,11 +50,16 @@ void main() {
 
   tearDown(() => snapshotsCtrl.close());
 
-  Widget buildSubject({Locale? locale}) => MaterialApp(
+  Widget buildSubject({Locale? locale, int recoveredWalkCount = 0}) =>
+      MaterialApp(
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: ActiveWalkScreen(recorder: recorder, repository: repository),
+        home: ActiveWalkScreen(
+          recorder: recorder,
+          repository: repository,
+          recoveredWalkCount: recoveredWalkCount,
+        ),
       );
 
   // ─── localization ────────────────────────────────────────────────────────────
@@ -119,6 +124,33 @@ void main() {
     await tester.pumpAndSettle();
 
     verifyNever(() => locationService.watchPosition());
+  });
+
+  // ─── startup crash recovery ──────────────────────────────────────────────
+
+  testWidgets('announces a recovered walk with a snackbar', (tester) async {
+    await tester.pumpWidget(buildSubject(recoveredWalkCount: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recovered an interrupted walk to your history'),
+        findsOneWidget);
+  });
+
+  testWidgets('recovery snackbar pluralises for several walks',
+      (tester) async {
+    await tester.pumpWidget(buildSubject(recoveredWalkCount: 3));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Recovered 3 interrupted walks to your history'),
+        findsOneWidget);
+  });
+
+  testWidgets('no recovery snackbar when nothing was recovered',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    expect(find.byType(SnackBar), findsNothing);
   });
 
   // ─── re-centre button ──────────────────────────────────────────────────────

@@ -263,6 +263,146 @@ void main() {
     });
   });
 
+  group('crash recovery', () {
+    // Shorthand: an orphaned walk is a row created by createWalk (recording
+    // started) that never reached finishWalk (process died mid-walk).
+    Future<void> appendFix(
+        String walkId, int index, double lat, double lng, DateTime at) {
+      return repository.appendCoordinate(
+          walkId, Coordinate(lat: lat, lng: lng, recordedAt: at), index);
+    }
+
+    test('updateProgress persists the in-flight duration', () async {
+      await repository.createWalk('live', DateTime(2026, 6, 1, 9, 0));
+
+      await repository.updateProgress('live', const Duration(minutes: 5));
+
+      final found = await repository.findById('live');
+      expect(found!.duration, const Duration(minutes: 5));
+      expect(found.endTime, isNull, reason: 'the walk is still in progress');
+    });
+
+    test('updateProgress never touches a finished walk', () async {
+      await repository.createWalk('done', DateTime(2026, 6, 1, 9, 0));
+      await repository.finishWalk('done', DateTime(2026, 6, 1, 9, 30),
+          const Duration(minutes: 25), 1250.0, const []);
+
+      // A straggler write (e.g. an in-flight throttled update racing stop)
+      // must not clobber the canonical duration finishWalk recorded.
+      await repository.updateProgress('done', const Duration(minutes: 99));
+
+      final found = await repository.findById('done');
+      expect(found!.duration, const Duration(minutes: 25));
+    });
+
+    test('recoverOrphans finishes a multi-coordinate orphan in place',
+        () async {
+      await repository.createWalk('orphan', DateTime(2026, 6, 1, 9, 0));
+      // Three fixes with a collinear midpoint the route simplifier drops.
+      await appendFix('orphan', 0, 55.676, 12.568, DateTime(2026, 6, 1, 9, 0));
+      await appendFix('orphan', 1, 55.677, 12.568, DateTime(2026, 6, 1, 9, 5));
+      await appendFix(
+          'orphan', 2, 55.678, 12.568, DateTime(2026, 6, 1, 9, 10));
+      // The recorder's periodic progress write survived the kill.
+      await repository.updateProgress('orphan', const Duration(minutes: 8));
+
+      final recovered = await repository.recoverOrphans();
+      expect(recovered, 1);
+
+      final walk = await repository.findById('orphan');
+      // End time is the last fix — the final moment we know recording ran.
+      expect(walk!.endTime, DateTime(2026, 6, 1, 9, 10));
+      // The persisted pause-aware duration is kept, not re-derived.
+      expect(walk.duration, const Duration(minutes: 8));
+      // Distance and route are computed from the stored coordinates exactly
+      // like finishWalk would: ~222 m along the meridian, simplified preview.
+      expect(walk.distanceMetres, closeTo(222, 5));
+      expect(walk.route, [
+        (lat: 55.676, lng: 12.568),
+        (lat: 55.678, lng: 12.568),
+      ]);
+      // The full recording is untouched.
+      expect(walk.coordinates.length, 3);
+    });
+
+    test(
+        'recoverOrphans falls back to the start-to-last-fix span when no '
+        'progress was persisted', () async {
+      await repository.createWalk('orphan', DateTime(2026, 6, 1, 9, 0));
+      await appendFix('orphan', 0, 55.676, 12.568, DateTime(2026, 6, 1, 9, 2));
+      await appendFix(
+          'orphan', 1, 55.677, 12.569, DateTime(2026, 6, 1, 9, 10));
+
+      final recovered = await repository.recoverOrphans();
+      expect(recovered, 1);
+
+      final walk = await repository.findById('orphan');
+      // duration_ms was never written, so the only honest estimate is the
+      // wall-clock span from start to the last fix.
+      expect(walk!.duration, const Duration(minutes: 10));
+    });
+
+    test('recoverOrphans deletes orphans with fewer than two coordinates',
+        () async {
+      await repository.createWalk('empty', DateTime(2026, 6, 1, 9, 0));
+      await repository.createWalk('single', DateTime(2026, 6, 1, 10, 0));
+      await appendFix('single', 0, 55.676, 12.568, DateTime(2026, 6, 1, 10));
+
+      final recovered = await repository.recoverOrphans();
+
+      // Nothing worth keeping: deletions don't count as recovered.
+      expect(recovered, 0);
+      expect(await repository.findById('empty'), isNull);
+      expect(await repository.findById('single'), isNull);
+      expect(await repository.findAll(), isEmpty);
+    });
+
+    test('recoverOrphans handles several orphans at once', () async {
+      await repository.createWalk('a', DateTime(2026, 6, 1, 9, 0));
+      await appendFix('a', 0, 55.676, 12.568, DateTime(2026, 6, 1, 9, 0));
+      await appendFix('a', 1, 55.677, 12.569, DateTime(2026, 6, 1, 9, 5));
+
+      await repository.createWalk('b', DateTime(2026, 6, 2, 9, 0));
+      await appendFix('b', 0, 55.676, 12.568, DateTime(2026, 6, 2, 9, 0));
+      await appendFix('b', 1, 55.677, 12.569, DateTime(2026, 6, 2, 9, 7));
+
+      await repository.createWalk('stub', DateTime(2026, 6, 3, 9, 0));
+
+      final recovered = await repository.recoverOrphans();
+      expect(recovered, 2);
+
+      // Both recovered walks now show up in the history query, newest first;
+      // the coordinate-less stub is gone.
+      final walks = await repository.findAll();
+      expect(walks.map((w) => w.id), ['b', 'a']);
+      expect(walks.every((w) => w.endTime != null), isTrue);
+      expect(await repository.findById('stub'), isNull);
+    });
+
+    test('recoverOrphans leaves finished walks untouched', () async {
+      await repository.createWalk('done', DateTime(2026, 6, 1, 9, 0));
+      await appendFix('done', 0, 55.676, 12.568, DateTime(2026, 6, 1, 9, 0));
+      await appendFix('done', 1, 55.677, 12.569, DateTime(2026, 6, 1, 9, 5));
+      await repository.finishWalk(
+        'done',
+        DateTime(2026, 6, 1, 9, 30),
+        const Duration(minutes: 25),
+        1250.0,
+        const [(lat: 55.676, lng: 12.568), (lat: 55.677, lng: 12.569)],
+      );
+
+      final recovered = await repository.recoverOrphans();
+      expect(recovered, 0);
+
+      // Every finished value survives exactly as finishWalk wrote it.
+      final walk = await repository.findById('done');
+      expect(walk!.endTime, DateTime(2026, 6, 1, 9, 30));
+      expect(walk.duration, const Duration(minutes: 25));
+      expect(walk.distanceMetres, 1250.0);
+      expect(walk.coordinates.length, 2);
+    });
+  });
+
   group('schema migration', () {
     test('v2 → v3 backfills distance from stored coordinates', () async {
       final dir = await Directory.systemTemp.createTemp('walkable_test');
