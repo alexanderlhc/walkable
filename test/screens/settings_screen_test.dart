@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/repository/settings_repository.dart';
@@ -9,6 +10,17 @@ import 'package:walkable/units.dart';
 
 void main() {
   late SettingsController controller;
+
+  setUp(() {
+    PackageInfo.setMockInitialValues(
+      appName: 'Walkable',
+      packageName: 'dk.raskrask.walkable',
+      version: '1.2.3',
+      buildNumber: '45',
+      buildSignature: '',
+      installerStore: null,
+    );
+  });
 
   Future<void> setUpController(Map<String, Object> initialPrefs) async {
     SharedPreferences.setMockInitialValues(initialPrefs);
@@ -221,5 +233,15 @@ void main() {
     expect(find.text('Enheder'), findsOneWidget);
     expect(find.text('Kilometer'), findsOneWidget);
     expect(find.text('Miles'), findsOneWidget);
+  });
+
+  testWidgets('shows the app version and build number at the bottom',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Version 1.2.3 (45)'), 500);
+    expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
   });
 }

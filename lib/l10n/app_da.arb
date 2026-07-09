@@ -49,5 +49,6 @@
   "notificationTitle": "Gåtur i gang",
   "notificationText": "Walkable registrerer din gåtur",
   "unitKm": "{value} km",
-  "unitMi": "{value} mi"
+  "unitMi": "{value} mi",
+  "settingsVersion": "Version {version} ({build})"
 }

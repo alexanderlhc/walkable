@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/units.dart';
@@ -91,9 +92,38 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
+            const _VersionFooter(),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// De-emphasized "Version x.y.z (build)" line at the bottom of the list.
+class _VersionFooter extends StatelessWidget {
+  const _VersionFooter();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context)!;
+
+    return FutureBuilder<PackageInfo>(
+      future: PackageInfo.fromPlatform(),
+      builder: (context, snapshot) {
+        final info = snapshot.data;
+        if (info == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+          child: Text(
+            l10n.settingsVersion(info.version, info.buildNumber),
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall!
+                .copyWith(color: theme.colorScheme.outline),
+          ),
+        );
+      },
     );
   }
 }
