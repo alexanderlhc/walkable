@@ -301,8 +301,7 @@ void main() {
       // Three fixes with a collinear midpoint the route simplifier drops.
       await appendFix('orphan', 0, 55.676, 12.568, DateTime(2026, 6, 1, 9, 0));
       await appendFix('orphan', 1, 55.677, 12.568, DateTime(2026, 6, 1, 9, 5));
-      await appendFix(
-          'orphan', 2, 55.678, 12.568, DateTime(2026, 6, 1, 9, 10));
+      await appendFix('orphan', 2, 55.678, 12.568, DateTime(2026, 6, 1, 9, 10));
       // The recorder's periodic progress write survived the kill.
       await repository.updateProgress('orphan', const Duration(minutes: 8));
 
@@ -330,8 +329,7 @@ void main() {
         'progress was persisted', () async {
       await repository.createWalk('orphan', DateTime(2026, 6, 1, 9, 0));
       await appendFix('orphan', 0, 55.676, 12.568, DateTime(2026, 6, 1, 9, 2));
-      await appendFix(
-          'orphan', 1, 55.677, 12.569, DateTime(2026, 6, 1, 9, 10));
+      await appendFix('orphan', 1, 55.677, 12.569, DateTime(2026, 6, 1, 9, 10));
 
       final recovered = await repository.recoverOrphans();
       expect(recovered, 1);
@@ -523,8 +521,7 @@ void main() {
           'walk_id': 'legacy',
           'lat': fixes[i].lat,
           'lng': fixes[i].lng,
-          'recorded_at':
-              DateTime(2026, 5, 1, 8, 15 * i).millisecondsSinceEpoch,
+          'recorded_at': DateTime(2026, 5, 1, 8, 15 * i).millisecondsSinceEpoch,
           'sequence_index': i,
         });
       }

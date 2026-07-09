@@ -93,10 +93,8 @@ void main() {
         final message = entry.value[key];
         if (message is! String) continue; // Missing key: parity test reports.
 
-        final used = placeholderRef
-            .allMatches(message)
-            .map((m) => m.group(1)!)
-            .toSet();
+        final used =
+            placeholderRef.allMatches(message).map((m) => m.group(1)!).toSet();
 
         final unused = declared.difference(used).toList()..sort();
         final undeclared = used.difference(declared).toList()..sort();

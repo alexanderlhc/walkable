@@ -6,14 +6,14 @@ import 'package:walkable/units.dart';
 void main() {
   group('unitSystemForLocale', () {
     test('imperial countries -> imperial', () {
-      expect(unitSystemForLocale(const Locale('en', 'US')),
-          UnitSystem.imperial);
-      expect(unitSystemForLocale(const Locale('en', 'GB')),
-          UnitSystem.imperial);
-      expect(unitSystemForLocale(const Locale('en', 'LR')),
-          UnitSystem.imperial);
-      expect(unitSystemForLocale(const Locale('my', 'MM')),
-          UnitSystem.imperial);
+      expect(
+          unitSystemForLocale(const Locale('en', 'US')), UnitSystem.imperial);
+      expect(
+          unitSystemForLocale(const Locale('en', 'GB')), UnitSystem.imperial);
+      expect(
+          unitSystemForLocale(const Locale('en', 'LR')), UnitSystem.imperial);
+      expect(
+          unitSystemForLocale(const Locale('my', 'MM')), UnitSystem.imperial);
     });
 
     test('metric countries -> metric', () {

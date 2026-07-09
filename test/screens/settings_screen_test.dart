@@ -28,7 +28,8 @@ void main() {
     await tester.pumpWidget(buildSubject());
 
     expect(find.text('Language'), findsOneWidget);
-    expect(find.text('System default'), findsNWidgets(3)); // language + theme + units
+    expect(find.text('System default'),
+        findsNWidgets(3)); // language + theme + units
     expect(find.text('English'), findsOneWidget);
     expect(find.text('Dansk'), findsOneWidget);
   });
@@ -41,8 +42,8 @@ void main() {
     await setUpController({});
     await tester.pumpWidget(buildSubject());
 
-    final group = tester
-        .widget<RadioGroup<Locale?>>(find.byType(RadioGroup<Locale?>));
+    final group =
+        tester.widget<RadioGroup<Locale?>>(find.byType(RadioGroup<Locale?>));
     expect(group.groupValue, isNull);
   });
 
@@ -50,8 +51,8 @@ void main() {
     await setUpController({'locale_override': 'da'});
     await tester.pumpWidget(buildSubject());
 
-    final group = tester
-        .widget<RadioGroup<Locale?>>(find.byType(RadioGroup<Locale?>));
+    final group =
+        tester.widget<RadioGroup<Locale?>>(find.byType(RadioGroup<Locale?>));
     expect(group.groupValue, const Locale('da'));
   });
 
@@ -91,14 +92,14 @@ void main() {
     expect(controller.localeOverride, isNull);
   });
 
-  testWidgets('renders Danish strings under the Danish locale',
-      (tester) async {
+  testWidgets('renders Danish strings under the Danish locale', (tester) async {
     await setUpController({});
     await tester.pumpWidget(buildSubject(locale: const Locale('da')));
 
     expect(find.text('Indstillinger'), findsOneWidget);
     expect(find.text('Sprog'), findsOneWidget);
-    expect(find.text('Systemstandard'), findsNWidgets(3)); // language + theme + units
+    expect(find.text('Systemstandard'),
+        findsNWidgets(3)); // language + theme + units
   });
 
   testWidgets('shows theme section with the three options', (tester) async {
@@ -120,8 +121,7 @@ void main() {
     expect(group.groupValue, ThemeMode.system);
   });
 
-  testWidgets('persisted theme override is the selected radio',
-      (tester) async {
+  testWidgets('persisted theme override is the selected radio', (tester) async {
     await setUpController({'theme_mode': 'dark'});
     await tester.pumpWidget(buildSubject());
 
@@ -188,8 +188,7 @@ void main() {
     await setUpController({});
     await tester.pumpWidget(buildSubject());
 
-    await tester.scrollUntilVisible(
-        find.byKey(const Key('units_mi')), 500);
+    await tester.scrollUntilVisible(find.byKey(const Key('units_mi')), 500);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('units_mi')));
     await tester.pumpAndSettle();
@@ -204,8 +203,7 @@ void main() {
     await setUpController({'units_override': 'imperial'});
     await tester.pumpWidget(buildSubject());
 
-    await tester.scrollUntilVisible(
-        find.byKey(const Key('units_system')), 500);
+    await tester.scrollUntilVisible(find.byKey(const Key('units_system')), 500);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('units_system')));
     await tester.pumpAndSettle();

@@ -25,7 +25,8 @@ class _StubLocationService extends LocationService {
   @override
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
-    BackgroundLocationConsent? backgroundConsent,
+    LocationConsent? foregroundConsent,
+    LocationConsent? backgroundConsent,
   }) async {
     startCalls++;
     final gate = startGate;
@@ -520,8 +521,7 @@ void main() {
   // periodic writes are what crash recovery falls back on. See
   // WalkRepository.recoverOrphans.
   group('progress persistence', () {
-    test('ticker writes progress once per 30 s of recording, not per tick',
-        () {
+    test('ticker writes progress once per 30 s of recording, not per tick', () {
       fakeAsync((async) {
         // Rebuilt inside the fakeAsync zone (the ticker must be created
         // here), and with no inner repository: a real sqflite call is served
@@ -592,7 +592,12 @@ void main() {
 
       clock.advance(const Duration(seconds: 42));
       await recorder.pause(); // triggers a progress write that rejects
-      await Future<void>.delayed(Duration.zero); // let the chained write run
+      // Drain the serialized persistence chain: the progress write is queued
+      // behind createWalk's real sqlite write, so a single event-loop turn
+      // isn't always enough (this was a flaky race).
+      while (flaky.updateProgressCalls.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
       expect(recorder.state, RecorderState.paused);
       expect(flaky.updateProgressCalls, hasLength(1));
 

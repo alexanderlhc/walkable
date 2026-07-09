@@ -18,19 +18,21 @@ void main() {
   setUp(() => service = LocationService());
   tearDown(() => service.dispose());
 
-  testWidgets('start() requests permission and stream emits at least one position',
+  testWidgets(
+      'start() requests permission and stream emits at least one position',
       (tester) async {
     final result = await service.start();
 
     expect(
       result,
-      anyOf(LocationServiceResult.started, LocationServiceResult.permissionDenied),
+      anyOf(LocationServiceResult.started,
+          LocationServiceResult.permissionDenied),
       reason: 'start() must return a known result — never throws',
     );
 
     if (result == LocationServiceResult.started) {
-      final position = await service.positions.first
-          .timeout(const Duration(seconds: 10));
+      final position =
+          await service.positions.first.timeout(const Duration(seconds: 10));
       expect(position.latitude, isNotNaN);
       expect(position.longitude, isNotNaN);
 

@@ -12,7 +12,7 @@ class FakeRuntimePermission implements RuntimePermission {
   int ensureGrantedCalls = 0;
   int isGrantedCalls = 0;
   // Records the consent gate handed to the most recent ensureGranted call.
-  BackgroundLocationConsent? lastConsent;
+  LocationConsent? lastConsent;
 
   @override
   Future<bool> isGranted() async {
@@ -21,7 +21,7 @@ class FakeRuntimePermission implements RuntimePermission {
   }
 
   @override
-  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async {
+  Future<bool> ensureGranted({LocationConsent? consent}) async {
     ensureGrantedCalls++;
     lastConsent = consent;
     // Mirror the real gate: a declined disclosure skips the request and leaves
@@ -81,8 +81,9 @@ void main() {
       expect(service.isRunning, isTrue);
     });
 
-    test('requests permission when initially denied; starts if then granted',
-        () async {
+    test(
+        'requests permission when initially denied and the disclosure is '
+        'accepted; starts if then granted', () async {
       when(() => mock.checkPermission())
           .thenAnswer((_) async => LocationPermission.denied);
       when(() => mock.requestPermission())
@@ -92,7 +93,10 @@ void main() {
             locationSettings: any(named: 'locationSettings')),
       ).thenAnswer((_) => const Stream.empty());
 
-      expect(await service.start(), LocationServiceResult.started);
+      expect(
+        await service.start(foregroundConsent: () async => true),
+        LocationServiceResult.started,
+      );
       verify(() => mock.requestPermission()).called(1);
     });
 
@@ -102,7 +106,10 @@ void main() {
       when(() => mock.requestPermission())
           .thenAnswer((_) async => LocationPermission.denied);
 
-      expect(await service.start(), LocationServiceResult.permissionDenied);
+      expect(
+        await service.start(foregroundConsent: () async => true),
+        LocationServiceResult.permissionDenied,
+      );
       expect(service.isRunning, isFalse);
       verifyNever(
         () => mock.getPositionStream(
@@ -242,13 +249,20 @@ void main() {
       verifyNever(() => mock.requestPermission());
     });
 
-    test('requests when denied; returns true if then granted', () async {
+    test(
+        'requests when denied and the foreground disclosure is accepted; '
+        'returns true if then granted', () async {
       when(() => mock.checkPermission())
           .thenAnswer((_) async => LocationPermission.denied);
       when(() => mock.requestPermission())
           .thenAnswer((_) async => LocationPermission.whileInUse);
 
-      expect(await service.checkAndRequestPermission(), isTrue);
+      expect(
+        await service.checkAndRequestPermission(
+          foregroundConsent: () async => true,
+        ),
+        isTrue,
+      );
       verify(() => mock.requestPermission()).called(1);
     });
 
@@ -258,7 +272,46 @@ void main() {
       when(() => mock.requestPermission())
           .thenAnswer((_) async => LocationPermission.denied);
 
-      expect(await service.checkAndRequestPermission(), isFalse);
+      expect(
+        await service.checkAndRequestPermission(
+          foregroundConsent: () async => true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('declining the foreground disclosure skips the OS prompt', () async {
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.denied);
+
+      expect(
+        await service.checkAndRequestPermission(
+          foregroundConsent: () async => false,
+        ),
+        isFalse,
+      );
+      verifyNever(() => mock.requestPermission());
+    });
+
+    test(
+        'foreground consent is not awaited when the permission is already '
+        'granted', () async {
+      var consentShown = false;
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.whileInUse);
+
+      expect(
+        await service.checkAndRequestPermission(
+          foregroundConsent: () async {
+            consentShown = true;
+            return true;
+          },
+        ),
+        isTrue,
+      );
+      expect(consentShown, isFalse,
+          reason: 'no OS prompt is coming, so no disclosure should show');
+      verifyNever(() => mock.requestPermission());
     });
 
     test('returns false for deniedForever without requesting', () async {

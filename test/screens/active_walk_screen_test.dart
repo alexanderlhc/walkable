@@ -44,14 +44,18 @@ void main() {
     when(() => recorder.locationService).thenReturn(locationService);
     when(() => recorder.start(
           notification: any(named: 'notification'),
+          foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
         )).thenAnswer((_) async => LocationServiceResult.started);
     when(() => recorder.pause()).thenAnswer((_) async {});
-    when(() => recorder.resume()).thenAnswer((_) async {});
+    when(() =>
+            recorder.resume(foregroundConsent: any(named: 'foregroundConsent')))
+        .thenAnswer((_) async {});
     when(() => recorder.stop()).thenAnswer((_) async {});
     when(() => recorder.reset()).thenReturn(null);
 
-    when(() => locationService.checkAndRequestPermission())
+    when(() => locationService.checkAndRequestPermission(
+            foregroundConsent: any(named: 'foregroundConsent')))
         .thenAnswer((_) async => true);
     when(() => locationService.watchPosition())
         .thenAnswer((_) => const Stream.empty());
@@ -61,7 +65,8 @@ void main() {
 
   tearDown(() => snapshotsCtrl.close());
 
-  Future<Widget> buildSubject({Locale? locale, int recoveredWalkCount = 0}) async {
+  Future<Widget> buildSubject(
+      {Locale? locale, int recoveredWalkCount = 0}) async {
     final prefs = await SharedPreferences.getInstance();
     settingsController = SettingsController(SettingsRepository(prefs))..load();
     return MaterialApp(
@@ -148,12 +153,72 @@ void main() {
     await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
-    verify(() => locationService.checkAndRequestPermission()).called(1);
+    verify(() => locationService.checkAndRequestPermission(
+        foregroundConsent: any(named: 'foregroundConsent'))).called(1);
+  });
+
+  testWidgets(
+      'shows the foreground disclosure before the launch OS prompt, '
+      'and accepting resolves the consent gate true', (tester) async {
+    // Play's Prominent Disclosure requirement: the very first OS location
+    // prompt (fired on screen open) must be immediately preceded by an in-app
+    // disclosure the user affirmatively accepts — the second rejection
+    // (IN_APP_EXPERIENCE-749) was for this prompt appearing bare.
+    bool? consentResult;
+    when(() => locationService.checkAndRequestPermission(
+          foregroundConsent: any(named: 'foregroundConsent'),
+        )).thenAnswer((invocation) async {
+      final consent = invocation.namedArguments[#foregroundConsent]
+          as Future<bool> Function();
+      consentResult = await consent();
+      return consentResult!;
+    });
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pump(); // post-frame callback fires the permission request
+    await tester.pump(); // surface the disclosure dialog
+
+    expect(find.text('Location access'), findsOneWidget);
+    expect(
+      find.textContaining('Next, Android will ask'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(consentResult, isTrue);
+  });
+
+  testWidgets(
+      'declining the foreground disclosure resolves the gate false and '
+      'shows the denied snackbar', (tester) async {
+    bool? consentResult;
+    when(() => locationService.checkAndRequestPermission(
+          foregroundConsent: any(named: 'foregroundConsent'),
+        )).thenAnswer((invocation) async {
+      final consent = invocation.namedArguments[#foregroundConsent]
+          as Future<bool> Function();
+      consentResult = await consent();
+      return consentResult!;
+    });
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pump();
+    await tester.pump();
+
+    await tester.tap(find.text('Not now'));
+    await tester.pumpAndSettle();
+
+    expect(consentResult, isFalse);
+    expect(find.byType(SnackBar), findsOneWidget);
+    verifyNever(() => locationService.watchPosition());
   });
 
   testWidgets('snackbar shown when location permission is denied',
       (tester) async {
-    when(() => locationService.checkAndRequestPermission())
+    when(() => locationService.checkAndRequestPermission(
+            foregroundConsent: any(named: 'foregroundConsent')))
         .thenAnswer((_) async => false);
 
     await tester.pumpWidget(await buildSubject());
@@ -172,7 +237,8 @@ void main() {
 
   testWidgets('watchPosition not subscribed when permission denied',
       (tester) async {
-    when(() => locationService.checkAndRequestPermission())
+    when(() => locationService.checkAndRequestPermission(
+            foregroundConsent: any(named: 'foregroundConsent')))
         .thenAnswer((_) async => false);
 
     await tester.pumpWidget(await buildSubject());
@@ -191,8 +257,7 @@ void main() {
         findsOneWidget);
   });
 
-  testWidgets('recovery snackbar pluralises for several walks',
-      (tester) async {
+  testWidgets('recovery snackbar pluralises for several walks', (tester) async {
     await tester.pumpWidget(await buildSubject(recoveredWalkCount: 3));
     await tester.pumpAndSettle();
 
@@ -220,7 +285,8 @@ void main() {
 
   testWidgets('re-centre button hidden when permission is denied',
       (tester) async {
-    when(() => locationService.checkAndRequestPermission())
+    when(() => locationService.checkAndRequestPermission(
+            foregroundConsent: any(named: 'foregroundConsent')))
         .thenAnswer((_) async => false);
 
     await tester.pumpWidget(await buildSubject());
@@ -241,6 +307,7 @@ void main() {
 
     verify(() => recorder.start(
           notification: any(named: 'notification'),
+          foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
         )).called(1);
     expect(find.byKey(const Key('stop_button')), findsOneWidget);
@@ -283,6 +350,7 @@ void main() {
     // its outcome — this is the disclosure → OS-prompt ordering Play requires.
     when(() => recorder.start(
           notification: any(named: 'notification'),
+          foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
         )).thenAnswer((invocation) async {
       final consent = invocation.namedArguments[#backgroundConsent]
@@ -314,6 +382,7 @@ void main() {
     bool? consentResult;
     when(() => recorder.start(
           notification: any(named: 'notification'),
+          foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
         )).thenAnswer((invocation) async {
       final consent = invocation.namedArguments[#backgroundConsent]

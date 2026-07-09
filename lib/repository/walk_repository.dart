@@ -206,8 +206,8 @@ class WalkRepository {
         );
 
         if (coordRows.length < 2) {
-          await txn.delete('coordinates',
-              where: 'walk_id = ?', whereArgs: [walkId]);
+          await txn
+              .delete('coordinates', where: 'walk_id = ?', whereArgs: [walkId]);
           await txn.delete('walks', where: 'id = ?', whereArgs: [walkId]);
           return;
         }
@@ -337,8 +337,9 @@ class WalkRepository {
   }
 
   /// The route column format: a JSON array of `[lat, lng]` pairs.
-  static String _encodeRoute(List<calc.Coord> route) =>
-      jsonEncode([for (final c in route) [c.lat, c.lng]]);
+  static String _encodeRoute(List<calc.Coord> route) => jsonEncode([
+        for (final c in route) [c.lat, c.lng]
+      ]);
 
   static List<calc.Coord>? _decodeRoute(String? json) {
     if (json == null) return null;

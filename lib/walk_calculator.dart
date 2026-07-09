@@ -47,8 +47,7 @@ List<Coord> simplifyRoute(
     var maxDist = 0.0;
     var furthest = -1;
     for (var i = start + 1; i < end; i++) {
-      final d =
-          _distanceToSegmentMetres(coords[i], coords[start], coords[end]);
+      final d = _distanceToSegmentMetres(coords[i], coords[start], coords[end]);
       if (d > maxDist) {
         maxDist = d;
         furthest = i;

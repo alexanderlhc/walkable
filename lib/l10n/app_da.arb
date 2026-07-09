@@ -32,6 +32,8 @@
   "unitsKilometers": "Kilometer",
   "unitsMiles": "Miles",
   "locationPermissionDenied": "Placeringstilladelse nægtet",
+  "foregroundDisclosureTitle": "Adgang til placering",
+  "foregroundDisclosureBody": "Walkable indsamler placeringsdata for at vise din position på kortet og registrere din gårute, mens du bruger appen. Dine placeringsdata forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade adgang til placering.",
   "locationDisclosureTitle": "Tillad placering i baggrunden",
   "locationDisclosureBody": "Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.",
   "locationDisclosureAccept": "Fortsæt",

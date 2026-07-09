@@ -32,6 +32,8 @@
   "unitsKilometers": "Kilometers",
   "unitsMiles": "Miles",
   "locationPermissionDenied": "Location permission denied",
+  "foregroundDisclosureTitle": "Location access",
+  "foregroundDisclosureBody": "Walkable collects location data to show your live position on the map and to record your walking route while you use the app. Your location data never leaves your device.\n\nNext, Android will ask you to allow location access.",
   "locationDisclosureTitle": "Allow background location",
   "locationDisclosureBody": "Walkable collects location data to record your walking route and show your live position on the map — including in the background, even when the app is closed or the screen is off. This keeps your walk recording while your phone is in your pocket. Your location is only used while a walk is running and never leaves your device.\n\nNext, Android will ask you to allow location access “All the time”.",
   "locationDisclosureAccept": "Continue",

@@ -108,7 +108,8 @@ void main() {
         coordinates: const [],
         duration: const Duration(minutes: 10),
       );
-      expect(stats.formattedPace(UnitSystem.metric, fallback: '--:--'), '--:--');
+      expect(
+          stats.formattedPace(UnitSystem.metric, fallback: '--:--'), '--:--');
     });
   });
 

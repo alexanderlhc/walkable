@@ -72,7 +72,8 @@ class WalkRecorder {
 
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
-    BackgroundLocationConsent? backgroundConsent,
+    LocationConsent? foregroundConsent,
+    LocationConsent? backgroundConsent,
   }) async {
     if (_starting || _state != RecorderState.idle) {
       return LocationServiceResult.running;
@@ -82,6 +83,7 @@ class WalkRecorder {
     try {
       final result = await locationService.start(
         notification: notification,
+        foregroundConsent: foregroundConsent,
         backgroundConsent: backgroundConsent,
       );
       if (result == LocationServiceResult.permissionDenied) {
@@ -96,7 +98,8 @@ class WalkRecorder {
       // Best-effort like the coordinate writes: a failure is logged rather
       // than left as an unhandled rejection that would poison the chain and
       // wedge stop().
-      _persist = _repository.createWalk(_id!, _startTime!).catchError((Object e) {
+      _persist =
+          _repository.createWalk(_id!, _startTime!).catchError((Object e) {
         debugPrint('WalkRecorder: failed to persist walk $_id: $e');
       });
       _lastProgressPersist = _startTime;
@@ -128,11 +131,17 @@ class WalkRecorder {
     _snapshots.add(_buildSnapshot(now));
   }
 
-  Future<void> resume() async {
+  /// [foregroundConsent] gates the OS foreground-location prompt in the rare
+  /// case the permission was revoked while paused — without it resume() stays
+  /// paused rather than prompting with no preceding disclosure.
+  Future<void> resume({LocationConsent? foregroundConsent}) async {
     if (_starting || _state != RecorderState.paused) return;
     _starting = true;
     try {
-      final result = await locationService.start(notification: _notification);
+      final result = await locationService.start(
+        notification: _notification,
+        foregroundConsent: foregroundConsent,
+      );
       if (result == LocationServiceResult.permissionDenied) {
         // Stay paused: entering recording without a position stream would show
         // a counting timer while zero coordinates are captured.
@@ -203,8 +212,7 @@ class WalkRecorder {
     // be reset and reused.
     try {
       await _persist;
-      final coords =
-          _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
+      final coords = _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
       await _repository.finishWalk(_id!, endTime, _elapsedAt(endTime),
           totalDistance(coords), simplifyRoute(coords));
     } catch (e) {

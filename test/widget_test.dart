@@ -33,7 +33,8 @@ void main() {
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => ctrl.stream);
     when(() => recorder.locationService).thenReturn(locationService);
-    when(() => locationService.checkAndRequestPermission())
+    when(() => locationService.checkAndRequestPermission(
+            foregroundConsent: any(named: 'foregroundConsent')))
         .thenAnswer((_) async => true);
     when(() => locationService.watchPosition())
         .thenAnswer((_) => const Stream.empty());
@@ -143,8 +144,7 @@ void main() {
     expect(prefs.getString('theme_mode'), 'dark');
   });
 
-  testWidgets('starts dark when a dark override was persisted',
-      (tester) async {
+  testWidgets('starts dark when a dark override was persisted', (tester) async {
     SharedPreferences.setMockInitialValues({'theme_mode': 'dark'});
     final prefs = await SharedPreferences.getInstance();
     final settingsController = SettingsController(SettingsRepository(prefs))
@@ -163,8 +163,7 @@ void main() {
     expect(app.themeMode, ThemeMode.dark);
   });
 
-  testWidgets('selecting Miles persists the imperial override',
-      (tester) async {
+  testWidgets('selecting Miles persists the imperial override', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     final settingsController = SettingsController(SettingsRepository(prefs))

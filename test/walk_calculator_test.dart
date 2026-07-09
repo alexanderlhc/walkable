@@ -42,8 +42,7 @@ void main() {
   group('simplifyRoute', () {
     test('returns fewer than three points unchanged', () {
       expect(simplifyRoute([]), isEmpty);
-      expect(simplifyRoute([(lat: 55.0, lng: 12.0)]),
-          [(lat: 55.0, lng: 12.0)]);
+      expect(simplifyRoute([(lat: 55.0, lng: 12.0)]), [(lat: 55.0, lng: 12.0)]);
       expect(
         simplifyRoute([(lat: 55.0, lng: 12.0), (lat: 55.001, lng: 12.001)]),
         [(lat: 55.0, lng: 12.0), (lat: 55.001, lng: 12.001)],

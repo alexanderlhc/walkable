@@ -107,7 +107,12 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       });
       if (last != null) _maybeAutoCentre(LatLng(last.lat, last.lng));
     });
-    _requestPermission();
+    // Deferred to after the first frame: the foreground-location disclosure
+    // dialog needs localizations and a Navigator, neither of which are
+    // available synchronously in initState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _requestPermission();
+    });
     // Announce startup crash recovery once, after the first frame so a
     // ScaffoldMessenger (and localizations) are available.
     if (widget.recoveredWalkCount > 0) {
@@ -125,7 +130,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
 
   Future<void> _requestPermission() async {
     final granted =
-        await widget.recorder.locationService.checkAndRequestPermission();
+        await widget.recorder.locationService.checkAndRequestPermission(
+      foregroundConsent: _showForegroundLocationDisclosure,
+    );
     if (!mounted) return;
     setState(() => _locationPermissionGranted = granted);
     if (!granted) {
@@ -193,6 +200,19 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     }
   }
 
+  /// Google Play "Prominent Disclosure": before the *initial* OS location
+  /// prompt, explain that Walkable collects location data and why, and require
+  /// the user to affirmatively accept. Returning `false` (declined) skips the
+  /// OS prompt entirely; the map just shows without the live position.
+  Future<bool> _showForegroundLocationDisclosure() async {
+    if (!mounted) return false;
+    final l10n = AppLocalizations.of(context)!;
+    return _showDisclosureDialog(
+      title: l10n.foregroundDisclosureTitle,
+      body: l10n.foregroundDisclosureBody,
+    );
+  }
+
   /// Google Play "Prominent Disclosure": before the OS "Allow all the time"
   /// prompt, explain that Walkable collects location in the background — even
   /// with the app closed or the screen off — and why, and require the user to
@@ -201,12 +221,23 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   Future<bool> _showBackgroundLocationDisclosure() async {
     if (!mounted) return false;
     final l10n = AppLocalizations.of(context)!;
+    return _showDisclosureDialog(
+      title: l10n.locationDisclosureTitle,
+      body: l10n.locationDisclosureBody,
+    );
+  }
+
+  Future<bool> _showDisclosureDialog({
+    required String title,
+    required String body,
+  }) async {
+    final l10n = AppLocalizations.of(context)!;
     final accepted = await showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: Text(l10n.locationDisclosureTitle),
-        content: Text(l10n.locationDisclosureBody),
+        title: Text(title),
+        content: Text(body),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -242,6 +273,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         title: l10n.notificationTitle,
         body: l10n.notificationText,
       ),
+      foregroundConsent: _showForegroundLocationDisclosure,
       backgroundConsent: _showBackgroundLocationDisclosure,
     );
     if (!mounted) return;
@@ -293,7 +325,8 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   }
 
   Future<void> _onResume() async {
-    await widget.recorder.resume();
+    await widget.recorder
+        .resume(foregroundConsent: _showForegroundLocationDisclosure);
     if (!mounted) return;
     // Reflect the recorder's actual state: resume() stays paused when the
     // location permission was revoked in the meantime.

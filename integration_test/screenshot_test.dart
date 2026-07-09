@@ -220,7 +220,7 @@ class _GrantedPermission implements RuntimePermission {
   Future<bool> isGranted() async => true;
 
   @override
-  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async => true;
+  Future<bool> ensureGranted({LocationConsent? consent}) async => true;
 }
 
 class _FakeGeolocator implements GeolocatorInterface {
@@ -245,7 +245,8 @@ class _FakeGeolocator implements GeolocatorInterface {
       LocationPermission.whileInUse;
 
   @override
-  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
+  Future<Position> getCurrentPosition(
+          {LocationSettings? locationSettings}) async =>
       _last;
 
   @override

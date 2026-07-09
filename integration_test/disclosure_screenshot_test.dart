@@ -1,10 +1,16 @@
-// Captures the Google Play "Prominent Disclosure" dialog (English) for the
-// background-location permission on a real device/emulator, so the in-app
-// disclosure shown before the OS prompt can be handed to reviewers.
+// Captures the Google Play "Prominent Disclosure" dialogs (English) on a real
+// device/emulator, so the in-app disclosures shown before each OS prompt can
+// be handed to reviewers:
 //
-// Forces the English locale and a background permission that is *not* yet
-// granted, so tapping Start surfaces the disclosure (the consent gate) over the
-// live map before any system prompt. Run via the wrapper:
+// - foreground_disclosure_en: shown on screen open, immediately before the
+//   initial OS location prompt (the prompt Play's second rejection,
+//   IN_APP_EXPERIENCE-749, flagged as appearing bare).
+// - disclosure_en: shown on Start, immediately before the OS
+//   "Allow all the time" background prompt.
+//
+// Forces the English locale and permissions that are *not* yet granted, so
+// the consent gates surface their dialogs before any system prompt. Run via
+// the wrapper:
 //
 //   tool/disclosure_screenshot.sh
 //
@@ -86,6 +92,50 @@ void main() {
 
     await binding.takeScreenshot('disclosure_en');
   });
+
+  testWidgets('capture foreground-location disclosure', (tester) async {
+    await binding.convertFlutterSurfaceToImage();
+
+    final repo = await WalkRepository.inMemory();
+    // Foreground permission not yet granted → the screen-open permission
+    // request runs the foreground disclosure consent gate before any OS
+    // prompt could appear.
+    final geo = _FakeGeolocator(_base, permission: LocationPermission.denied);
+    final location = LocationService(
+      geolocator: geo,
+      permissions: {
+        LocationPermissionKind.notification: _GrantedPermission(),
+        LocationPermissionKind.background: _GrantedPermission(),
+        LocationPermissionKind.batteryOptimization: _GrantedPermission(),
+      },
+    );
+    final recorder = WalkRecorder(locationService: location, repository: repo);
+    SharedPreferences.setMockInitialValues({});
+    final prefs = await SharedPreferences.getInstance();
+    final settingsController = SettingsController(SettingsRepository(prefs))
+      ..load();
+
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('en'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: ActiveWalkScreen(
+        recorder: recorder,
+        repository: repo,
+        settingsController: settingsController,
+      ),
+    ));
+    // The post-frame permission request awaits the consent gate (which never
+    // resolves here), leaving the disclosure dialog up over the map.
+    await tester.pump(); // post-frame callback fires the permission request
+    await tester.pump(); // build the dialog route
+    expect(find.text('Location access'), findsOneWidget);
+
+    // Let the map tiles load beneath the dialog before the readback.
+    await _settleMap(tester);
+
+    await binding.takeScreenshot('foreground_disclosure_en');
+  });
 }
 
 Future<void> _settleMap(WidgetTester tester) async {
@@ -100,7 +150,7 @@ class _GrantedPermission implements RuntimePermission {
   @override
   Future<bool> isGranted() async => true;
   @override
-  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async => true;
+  Future<bool> ensureGranted({LocationConsent? consent}) async => true;
 }
 
 /// Background permission that is not yet granted, so [ensureGranted] runs the
@@ -109,14 +159,17 @@ class _DisclosurePermission implements RuntimePermission {
   @override
   Future<bool> isGranted() async => false;
   @override
-  Future<bool> ensureGranted({BackgroundLocationConsent? consent}) async =>
+  Future<bool> ensureGranted({LocationConsent? consent}) async =>
       consent != null && await consent();
 }
 
 class _FakeGeolocator implements GeolocatorInterface {
-  _FakeGeolocator(LatLng start)
-      : _last = _position(start.latitude, start.longitude, _epoch);
+  _FakeGeolocator(LatLng start,
+      {LocationPermission permission = LocationPermission.whileInUse})
+      : _permission = permission,
+        _last = _position(start.latitude, start.longitude, _epoch);
 
+  final LocationPermission _permission;
   final StreamController<Position> _controller =
       StreamController<Position>.broadcast();
   Position _last;
@@ -127,13 +180,12 @@ class _FakeGeolocator implements GeolocatorInterface {
   }
 
   @override
-  Future<LocationPermission> checkPermission() async =>
-      LocationPermission.whileInUse;
+  Future<LocationPermission> checkPermission() async => _permission;
   @override
-  Future<LocationPermission> requestPermission() async =>
-      LocationPermission.whileInUse;
+  Future<LocationPermission> requestPermission() async => _permission;
   @override
-  Future<Position> getCurrentPosition({LocationSettings? locationSettings}) async =>
+  Future<Position> getCurrentPosition(
+          {LocationSettings? locationSettings}) async =>
       _last;
   @override
   Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
