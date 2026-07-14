@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Play Store track"
+        type: choice
+        options: [internal, production]
+        default: internal
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # fastlane's last_git_tag needs tag history on manual runs
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.44.0"
+          cache: true
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Install fastlane
+        run: gem install fastlane --no-document
+
+      - name: Materialize signing secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+          PLAY_STORE_JSON_KEY_CONTENT: ${{ secrets.PLAY_STORE_JSON_KEY }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          printf '%s\n' "$ANDROID_KEY_PROPERTIES" > android/key.properties
+          printf '%s\n' "$PLAY_STORE_JSON_KEY_CONTENT" > "$RUNNER_TEMP/play-store-key.json"
+
+      - name: Deploy
+        working-directory: android
+        env:
+          PLAY_STORE_JSON_KEY: ${{ runner.temp }}/play-store-key.json
+        run: fastlane deploy track:${{ inputs.track || 'internal' }}
