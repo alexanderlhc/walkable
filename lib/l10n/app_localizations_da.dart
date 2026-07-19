@@ -36,6 +36,15 @@ class AppLocalizationsDa extends AppLocalizations {
   String get actionRecenter => 'Centrér kort';
 
   @override
+  String get actionDone => 'Færdig';
+
+  @override
+  String get actionViewRoute => 'Se rute';
+
+  @override
+  String get actionShare => 'Del';
+
+  @override
   String get statDistance => 'Distance';
 
   @override
@@ -108,13 +117,15 @@ class AppLocalizationsDa extends AppLocalizations {
   String get foregroundDisclosureTitle => 'Adgang til placering';
 
   @override
-  String get foregroundDisclosureBody => 'Walkable indsamler placeringsdata for at vise din position på kortet og registrere din gårute, mens du bruger appen. Dine placeringsdata forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade adgang til placering.';
+  String get foregroundDisclosureBody =>
+      'Walkable indsamler placeringsdata for at vise din position på kortet og registrere din gårute, mens du bruger appen. Dine placeringsdata forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade adgang til placering.';
 
   @override
   String get locationDisclosureTitle => 'Tillad placering i baggrunden';
 
   @override
-  String get locationDisclosureBody => 'Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.';
+  String get locationDisclosureBody =>
+      'Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.';
 
   @override
   String get locationDisclosureAccept => 'Fortsæt';
@@ -123,10 +134,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get locationDisclosureDecline => 'Ikke nu';
 
   @override
-  String get backgroundTrackingWarning => 'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
+  String get backgroundTrackingWarning =>
+      'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
 
   @override
-  String get batteryOptimizationWarning => 'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
+  String get batteryOptimizationWarning =>
+      'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
 
   @override
   String get openSettings => 'Indstillinger';
@@ -139,6 +152,23 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get statusConfirmStop => 'Afslut gåtur?';
+
+  @override
+  String get walkCompleteTitle => 'Gåtur gennemført';
+
+  @override
+  String get walkCompleteSubtitle => 'Godt gået — din gåtur er gemt.';
+
+  @override
+  String get markerStart => 'Start';
+
+  @override
+  String get markerFinish => 'Mål';
+
+  @override
+  String shareWalkSummary(String distance, String duration) {
+    return 'Jeg gik $distance på $duration med Walkable';
+  }
 
   @override
   String locationError(String error) {

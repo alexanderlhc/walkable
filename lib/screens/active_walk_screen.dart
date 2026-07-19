@@ -5,10 +5,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
+import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/settings_screen.dart';
+import 'package:walkable/screens/walk_detail_screen.dart';
 import 'package:walkable/screens/walk_history_screen.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/theme.dart';
@@ -26,13 +29,23 @@ class ActiveWalkScreen extends StatefulWidget {
   /// user knows why an interrupted walk reappeared.
   final int recoveredWalkCount;
 
+  /// Presents the platform share sheet for a plain-text summary. Injectable
+  /// so widget tests can observe the share without hitting the real platform
+  /// channel; production uses the share_plus sheet.
+  final Future<void> Function(String text) shareText;
+
   const ActiveWalkScreen({
     super.key,
     required this.recorder,
     required this.repository,
     required this.settingsController,
     this.recoveredWalkCount = 0,
+    this.shareText = _systemShareSheet,
   });
+
+  static Future<void> _systemShareSheet(String text) async {
+    await SharePlus.instance.share(ShareParams(text: text));
+  }
 
   @override
   State<ActiveWalkScreen> createState() => _ActiveWalkScreenState();
@@ -51,6 +64,13 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   // Height of the bottom panel, reported by it after layout. The panel overlays
   // the lower part of the map, so the camera treats that band as off-screen.
   double _bottomPanelHeight = 0;
+
+  // The walk that just finished, as saved by [WalkRecorder.stop]. Non-null
+  // while the post-walk summary panel is on screen: the map keeps drawing this
+  // walk's route (reset() cleared the live snapshot's polyline) with
+  // start/finish markers, and the panel shows its final stats. Cleared when
+  // the user taps Done.
+  Walk? _completedWalk;
 
   // One-shot auto-centre: when GPS goes from no-signal to its first fix, move
   // the camera onto the user once. Deliberately NOT sticky — we don't re-centre
@@ -334,22 +354,102 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   }
 
   Future<void> _onStop() async {
-    await widget.recorder.stop();
+    final walk = await widget.recorder.stop();
     widget.recorder.reset();
     if (!mounted) return;
-    setState(() => _recorderState = RecorderState.idle);
+    setState(() {
+      _recorderState = RecorderState.idle;
+      // Null (nothing recorded, or the save failed) skips the summary and
+      // falls straight back to idle — there is no saved walk to present.
+      _completedWalk = walk;
+    });
+    if (walk != null) {
+      // Fit the camera to the finished route once the summary panel has laid
+      // out AND reported its (taller) height — that takes one frame to render
+      // the panel plus one for onHeightChanged's setState, hence two hops.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _fitCompletedRoute();
+        });
+      });
+    }
     // Recording tore down the live preview (see [_onStart]); restart it so the
     // blue dot keeps following the user on the idle screen after the walk ends.
     if (_locationPermissionGranted) _startLivePreview();
   }
 
+  // Move the camera so the whole finished route sits in view above the summary
+  // panel, with the panel band treated as off-screen like everywhere else.
+  void _fitCompletedRoute() {
+    final points = _completedRoutePoints;
+    if (points.length < 2) return;
+    final bounds = LatLngBounds.fromPoints(points);
+    // Zero-size bounds (every fix on one spot) can't be zoom-fit; leave the
+    // camera where it is — the route is a dot the user is standing on anyway.
+    if (bounds.north == bounds.south && bounds.east == bounds.west) return;
+    try {
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: bounds,
+          padding: EdgeInsets.fromLTRB(48, 100, 48, _bottomPanelHeight + 48),
+        ),
+      );
+    } catch (_) {
+      // Map not laid out yet; the summary still shows, just unfitted.
+    }
+  }
+
+  /// The finished walk's route, or empty while no summary is showing.
+  List<LatLng> get _completedRoutePoints =>
+      _completedWalk?.coordinates.map((c) => LatLng(c.lat, c.lng)).toList() ??
+      const [];
+
+  void _dismissCompleted() {
+    setState(() => _completedWalk = null);
+  }
+
+  void _viewCompletedRoute() {
+    final walk = _completedWalk;
+    if (walk == null) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WalkDetailScreen(
+          walk: walk,
+          settingsController: widget.settingsController,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareCompletedWalk() async {
+    final walk = _completedWalk;
+    if (walk == null) return;
+    final l10n = AppLocalizations.of(context)!;
+    final stats = WalkStats.of(walk);
+    final units = _units;
+    final distance = units == UnitSystem.metric
+        ? l10n.unitKm(stats.formattedDistance(units))
+        : l10n.unitMi(stats.formattedDistance(units));
+    await widget.shareText(l10n.shareWalkSummary(
+      distance,
+      stats.formattedDuration(fallback: l10n.durationUnavailable),
+    ));
+  }
+
+  UnitSystem get _units =>
+      widget.settingsController.unitsOverride ??
+      unitSystemForLocale(WidgetsBinding.instance.platformDispatcher.locale);
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final points =
-        _snapshot?.polyline.map((c) => LatLng(c.lat, c.lng)).toList() ?? [];
-    final units = widget.settingsController.unitsOverride ??
-        unitSystemForLocale(WidgetsBinding.instance.platformDispatcher.locale);
+    // While the post-walk summary is up, draw the saved walk's route (reset()
+    // cleared the live snapshot's polyline); otherwise the live track.
+    final completedPoints = _completedRoutePoints;
+    final points = _completedWalk != null
+        ? completedPoints
+        : _snapshot?.polyline.map((c) => LatLng(c.lat, c.lng)).toList() ?? [];
+    final units = _units;
 
     final topPadding = MediaQuery.of(context).padding.top + 12;
 
@@ -391,12 +491,31 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                     ),
                   ],
                 ),
+              if (completedPoints.length >= 2)
+                MarkerLayer(
+                  markers: [
+                    _routeEndMarker(
+                      completedPoints.first,
+                      l10n.markerStart.toUpperCase(),
+                      WalkStatusColors.of(context).recording,
+                    ),
+                    _routeEndMarker(
+                      completedPoints.last,
+                      l10n.markerFinish.toUpperCase(),
+                      Theme.of(context).colorScheme.error,
+                    ),
+                  ],
+                ),
             ],
           ),
           _BottomPanel(
             state: _recorderState,
             snapshot: _snapshot,
             units: units,
+            completedWalk: _completedWalk,
+            onDismissCompleted: _dismissCompleted,
+            onViewRoute: _viewCompletedRoute,
+            onShare: _shareCompletedWalk,
             onStart: _onStart,
             onPause: _onPause,
             onResume: _onResume,
@@ -448,8 +567,12 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
               ],
             ),
           ),
-          // Re-centre — top right, only when dot is off-screen
-          if (_locationPermissionGranted && _positionOutOfView)
+          // Re-centre — top right, only when dot is off-screen. Suppressed
+          // while the summary shows: the camera is deliberately on the route,
+          // not the user, so the chip would be pure noise there.
+          if (_completedWalk == null &&
+              _locationPermissionGranted &&
+              _positionOutOfView)
             Positioned(
               top: topPadding,
               right: 12,
@@ -470,6 +593,59 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       ),
     );
   }
+
+  // A labeled route-end marker: the dot sits on the route point, the label
+  // chip hangs just below it.
+  Marker _routeEndMarker(LatLng point, String label, Color color) {
+    final cs = Theme.of(context).colorScheme;
+    // The box anchors its top edge on the point (alignment below), so the dot
+    // sits exactly on the route end; the height just reserves room for the
+    // label chip hanging under it (with slack for larger text scales).
+    return Marker(
+      point: point,
+      width: 72,
+      height: 56,
+      alignment: Alignment.bottomCenter,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: color,
+              border: Border.all(color: cs.surface, width: 2.5),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x33000000),
+                  blurRadius: 4,
+                  offset: Offset(0, 1),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 3),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+            decoration: BoxDecoration(
+              color: cs.inverseSurface.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: cs.onInverseSurface,
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.1,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─── Bottom control panel ────────────────────────────────────────────────────
@@ -480,6 +656,14 @@ class _BottomPanel extends StatefulWidget {
   final RecorderState state;
   final WalkSnapshot? snapshot;
   final UnitSystem units;
+
+  // When non-null (and the recorder is idle), the panel shows the "walk
+  // complete" summary for this walk instead of the Start button.
+  final Walk? completedWalk;
+  final VoidCallback onDismissCompleted;
+  final VoidCallback onViewRoute;
+  final VoidCallback onShare;
+
   final VoidCallback onStart;
   final VoidCallback onPause;
   final VoidCallback onResume;
@@ -492,6 +676,10 @@ class _BottomPanel extends StatefulWidget {
     required this.state,
     required this.snapshot,
     required this.units,
+    required this.completedWalk,
+    required this.onDismissCompleted,
+    required this.onViewRoute,
+    required this.onShare,
     required this.onStart,
     required this.onPause,
     required this.onResume,
@@ -555,7 +743,9 @@ class _BottomPanelState extends State<_BottomPanel> {
             ),
             padding: EdgeInsets.fromLTRB(24, 20, 24, 20 + bottomInset),
             child: widget.state == RecorderState.idle
-                ? _buildIdle(l10n)
+                ? (widget.completedWalk != null
+                    ? _buildCompleted(l10n)
+                    : _buildIdle(l10n))
                 : _buildActive(l10n),
           ),
         ),
@@ -581,6 +771,123 @@ class _BottomPanelState extends State<_BottomPanel> {
       ),
       icon: const Icon(Icons.play_arrow_rounded, size: 26),
       label: Text(l10n.actionStart.toUpperCase()),
+    );
+  }
+
+  // Post-walk summary: celebratory check, the walk's final stats, and
+  // Done / View route / Share.
+  Widget _buildCompleted(AppLocalizations l10n) {
+    final cs = Theme.of(context).colorScheme;
+    final stats = WalkStats.of(widget.completedWalk!);
+    const buttonTextStyle = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.2,
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: cs.primaryContainer,
+          ),
+          child: Icon(
+            Icons.check_rounded,
+            size: 26,
+            color: cs.onPrimaryContainer,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          l10n.walkCompleteTitle,
+          style: TextStyle(
+            color: cs.onSurface,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          l10n.walkCompleteSubtitle,
+          style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+        ),
+        const SizedBox(height: 20),
+        IntrinsicHeight(
+          child: Row(
+            children: [
+              _StatBlock(
+                label: l10n.statDistance,
+                value: stats.formattedDistance(widget.units),
+                unit: widget.units == UnitSystem.metric ? 'km' : 'mi',
+              ),
+              VerticalDivider(color: cs.outlineVariant, width: 1),
+              _StatBlock(
+                label: l10n.statDuration,
+                value:
+                    stats.formattedDuration(fallback: l10n.durationUnavailable),
+                unit: null,
+              ),
+              VerticalDivider(color: cs.outlineVariant, width: 1),
+              _StatBlock(
+                label: l10n.statPace,
+                value: stats.formattedPace(widget.units,
+                    fallback: l10n.paceUnavailable),
+                unit: stats.paceMinPerKm.isFinite
+                    ? (widget.units == UnitSystem.metric ? '/km' : '/mi')
+                    : null,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+        FilledButton(
+          key: const Key('done_button'),
+          onPressed: () {
+            HapticFeedback.lightImpact();
+            widget.onDismissCompleted();
+          },
+          style: FilledButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+            shape: const StadiumBorder(),
+            textStyle: buttonTextStyle,
+          ),
+          child: Text(l10n.actionDone.toUpperCase()),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                key: const Key('view_route_button'),
+                onPressed: widget.onViewRoute,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  shape: const StadiumBorder(),
+                  textStyle: buttonTextStyle,
+                ),
+                child: Text(l10n.actionViewRoute.toUpperCase()),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton(
+                key: const Key('share_button'),
+                onPressed: widget.onShare,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                  shape: const StadiumBorder(),
+                  textStyle: buttonTextStyle,
+                ),
+                child: Text(l10n.actionShare.toUpperCase()),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 

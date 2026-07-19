@@ -36,6 +36,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get actionRecenter => 'Recenter map';
 
   @override
+  String get actionDone => 'Done';
+
+  @override
+  String get actionViewRoute => 'View route';
+
+  @override
+  String get actionShare => 'Share';
+
+  @override
   String get statDistance => 'Distance';
 
   @override
@@ -108,13 +117,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get foregroundDisclosureTitle => 'Location access';
 
   @override
-  String get foregroundDisclosureBody => 'Walkable collects location data to show your live position on the map and to record your walking route while you use the app. Your location data never leaves your device.\n\nNext, Android will ask you to allow location access.';
+  String get foregroundDisclosureBody =>
+      'Walkable collects location data to show your live position on the map and to record your walking route while you use the app. Your location data never leaves your device.\n\nNext, Android will ask you to allow location access.';
 
   @override
   String get locationDisclosureTitle => 'Allow background location';
 
   @override
-  String get locationDisclosureBody => 'Walkable collects location data to record your walking route and show your live position on the map — including in the background, even when the app is closed or the screen is off. This keeps your walk recording while your phone is in your pocket. Your location is only used while a walk is running and never leaves your device.\n\nNext, Android will ask you to allow location access “All the time”.';
+  String get locationDisclosureBody =>
+      'Walkable collects location data to record your walking route and show your live position on the map — including in the background, even when the app is closed or the screen is off. This keeps your walk recording while your phone is in your pocket. Your location is only used while a walk is running and never leaves your device.\n\nNext, Android will ask you to allow location access “All the time”.';
 
   @override
   String get locationDisclosureAccept => 'Continue';
@@ -123,10 +134,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get locationDisclosureDecline => 'Not now';
 
   @override
-  String get backgroundTrackingWarning => 'Notifications are off, so your walk may stop recording when the screen is locked.';
+  String get backgroundTrackingWarning =>
+      'Notifications are off, so your walk may stop recording when the screen is locked.';
 
   @override
-  String get batteryOptimizationWarning => 'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
+  String get batteryOptimizationWarning =>
+      'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
 
   @override
   String get openSettings => 'Settings';
@@ -139,6 +152,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get statusConfirmStop => 'Finish walk?';
+
+  @override
+  String get walkCompleteTitle => 'Walk complete';
+
+  @override
+  String get walkCompleteSubtitle => 'Nice one — your walk has been saved.';
+
+  @override
+  String get markerStart => 'Start';
+
+  @override
+  String get markerFinish => 'Finish';
+
+  @override
+  String shareWalkSummary(String distance, String duration) {
+    return 'I walked $distance in $duration with Walkable';
+  }
 
   @override
   String locationError(String error) {

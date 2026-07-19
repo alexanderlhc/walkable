@@ -190,9 +190,13 @@ class WalkRecorder {
     });
   }
 
-  Future<void> stop() async {
+  /// Stops recording and finalizes the walk. Returns the finished walk as it
+  /// was saved, hydrated with its coordinates, so the caller can present it
+  /// without re-querying the repository. Returns null when the recorder wasn't
+  /// running, or when persistence failed (the recorder still ends up stopped).
+  Future<Walk?> stop() async {
     if (_state != RecorderState.recording && _state != RecorderState.paused) {
-      return;
+      return null;
     }
     _ticker?.cancel();
     _ticker = null;
@@ -215,8 +219,10 @@ class WalkRecorder {
       final coords = _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();
       await _repository.finishWalk(_id!, endTime, _elapsedAt(endTime),
           totalDistance(coords), simplifyRoute(coords));
+      return await _repository.findById(_id!);
     } catch (e) {
       debugPrint('WalkRecorder: failed to finish walk $_id: $e');
+      return null;
     }
   }
 
