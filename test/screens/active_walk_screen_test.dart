@@ -848,6 +848,34 @@ void main() {
     expect(camera.visibleBounds.contains(const LatLng(55.710, 12.600)), isTrue);
   });
 
+  testWidgets('live location dot is hidden while the summary is showing',
+      (tester) async {
+    // Same rationale as the suppressed re-centre chip: the camera is on the
+    // route, not the user, and the dot sits on the last fix where it would
+    // swallow the finish marker.
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+    final positions = StreamController<Position>.broadcast();
+    addTearDown(positions.close);
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    positions.add(pos(55.6761, 12.5683));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircleLayer), findsOneWidget,
+        reason: 'the live dot shows once a fix arrives');
+
+    await finishWalkFlow(tester);
+    expect(find.byType(CircleLayer), findsNothing);
+
+    await tester.tap(find.byKey(const Key('done_button')));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircleLayer), findsOneWidget,
+        reason: 'the live dot returns once the summary is dismissed');
+  });
+
   testWidgets('DONE dismisses the summary back to idle', (tester) async {
     when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
 

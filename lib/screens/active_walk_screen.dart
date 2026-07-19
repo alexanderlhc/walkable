@@ -479,7 +479,11 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                     ),
                   ],
                 ),
-              if (_currentPosition != null)
+              // The live dot is suppressed while the summary shows, for the
+              // same reason as the re-centre chip below: the camera is on the
+              // route, and the dot sits on the last fix where it swallows the
+              // finish marker.
+              if (_completedWalk == null && _currentPosition != null)
                 CircleLayer(
                   circles: [
                     CircleMarker(
