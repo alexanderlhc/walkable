@@ -58,6 +58,9 @@ void main() {
       permissions: {
         LocationPermissionKind.notification: _GrantedPermission(),
         LocationPermissionKind.background: _GrantedPermission(),
+        // Must be faked as granted: on a wiped emulator the real permission
+        // pops a system dialog that recorder.start() blocks on.
+        LocationPermissionKind.batteryOptimization: _GrantedPermission(),
       },
     );
     final recorder = WalkRecorder(
