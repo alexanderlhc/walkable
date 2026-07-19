@@ -649,7 +649,7 @@ void main() {
     verify(() => locationService.watchPosition()).called(2);
   });
 
-  // ─── auto-centre on first fix ────────────────────────────────────────────────
+  // ─── camera follow ─────────────────────────────────────────────────────────
 
   Position pos(double lat, double lng) => Position(
         latitude: lat,
@@ -669,7 +669,14 @@ void main() {
   MapController cameraControllerOf(WidgetTester tester) =>
       tester.widget<FlutterMap>(find.byType(FlutterMap)).mapController!;
 
-  testWidgets('auto-centres the map on the first fix from watchPosition',
+  // An explicit pan gesture on the map — reaches onPositionChanged with
+  // hasGesture=true, unlike a programmatic MapController.move.
+  Future<void> panMap(WidgetTester tester) async {
+    await tester.drag(find.byType(FlutterMap), const Offset(0, -200));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('follows the user: every watchPosition fix recentres the camera',
       (tester) async {
     final positions = StreamController<Position>();
     when(() => locationService.watchPosition())
@@ -682,14 +689,23 @@ void main() {
     positions.add(pos(40.7128, -74.0060));
     await tester.pumpAndSettle();
 
-    final camera = cameraControllerOf(tester).camera;
+    var camera = cameraControllerOf(tester).camera;
     expect(camera.center.latitude, closeTo(40.7128, 0.0001));
     expect(camera.center.longitude, closeTo(-74.0060, 0.0001));
+
+    // Follow is sticky: the next fix recentres too, keeping the user's zoom.
+    positions.add(pos(34.0522, -118.2437));
+    await tester.pumpAndSettle();
+
+    camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(34.0522, 0.0001));
+    expect(camera.center.longitude, closeTo(-118.2437, 0.0001));
+    expect(camera.zoom, 17); // the hardcoded initial zoom, untouched
 
     await positions.close();
   });
 
-  testWidgets('auto-centres the map on the first fix from the snapshots stream',
+  testWidgets('follows fixes from the snapshots stream while recording',
       (tester) async {
     await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
@@ -701,12 +717,25 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    final camera = cameraControllerOf(tester).camera;
+    var camera = cameraControllerOf(tester).camera;
     expect(camera.center.latitude, closeTo(40.7128, 0.0001));
     expect(camera.center.longitude, closeTo(-74.0060, 0.0001));
+
+    snapshotsCtrl.add(WalkSnapshot(
+      stats: const WalkStats(distanceMetres: 100, duration: Duration.zero),
+      polyline: const [
+        (lat: 40.7128, lng: -74.0060),
+        (lat: 40.7200, lng: -74.0100),
+      ],
+    ));
+    await tester.pumpAndSettle();
+
+    camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(40.7200, 0.0001));
+    expect(camera.center.longitude, closeTo(-74.0100, 0.0001));
   });
 
-  testWidgets('does not re-centre on later fixes (one-shot, lets the user pan)',
+  testWidgets('a pan gesture disengages follow: later fixes leave the camera',
       (tester) async {
     final positions = StreamController<Position>();
     when(() => locationService.watchPosition())
@@ -715,28 +744,28 @@ void main() {
     await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
-    positions.add(pos(40.7128, -74.0060)); // first fix → auto-centre
+    positions.add(pos(40.7128, -74.0060));
     await tester.pumpAndSettle();
 
-    // Simulate the user panning the map away from the dot.
-    final controller = cameraControllerOf(tester);
-    controller.move(const LatLng(48.8566, 2.3522), controller.camera.zoom);
-    await tester.pumpAndSettle();
+    await panMap(tester);
+    final panned = cameraControllerOf(tester).camera.center;
+    expect(panned.latitude, isNot(closeTo(40.7128, 0.0001)),
+        reason: 'the pan gesture itself must move the camera off the fix');
 
-    positions
-        .add(pos(34.0522, -118.2437)); // second fix → must NOT hijack camera
+    positions.add(pos(34.0522, -118.2437)); // must NOT hijack the camera
     await tester.pumpAndSettle();
 
     final camera = cameraControllerOf(tester).camera;
-    expect(camera.center.latitude, closeTo(48.8566, 0.0001)); // still Paris
-    expect(camera.center.longitude, closeTo(2.3522, 0.0001));
+    expect(camera.center.latitude, closeTo(panned.latitude, 0.0001));
+    expect(camera.center.longitude, closeTo(panned.longitude, 0.0001));
 
     await positions.close();
   });
 
-  testWidgets(
-      'recentre chip appears when the dot is hidden behind the bottom panel',
+  testWidgets('programmatic camera moves do not disengage follow',
       (tester) async {
+    // Our own moves (follow itself, the completion route fit) report
+    // hasGesture=false; only real gestures may turn follow off.
     final positions = StreamController<Position>();
     when(() => locationService.watchPosition())
         .thenAnswer((_) => positions.stream);
@@ -744,21 +773,89 @@ void main() {
     await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
-    // First fix auto-centres; the dot sits mid-map, comfortably in view.
+    positions.add(pos(40.7128, -74.0060));
+    await tester.pumpAndSettle();
+
+    final controller = cameraControllerOf(tester);
+    controller.move(const LatLng(48.8566, 2.3522), controller.camera.zoom);
+    await tester.pumpAndSettle();
+
+    positions.add(pos(34.0522, -118.2437));
+    await tester.pumpAndSettle();
+
+    final camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(34.0522, 0.0001));
+    expect(camera.center.longitude, closeTo(-118.2437, 0.0001));
+
+    await positions.close();
+  });
+
+  // Disengage follow with a pan, then land a fix inside the bottom panel's
+  // footprint — on the map and clear of the screen edges, but hidden behind
+  // the panel — so the recentre chip has a reason to appear.
+  Future<LatLng> parkDotBehindPanel(
+      WidgetTester tester, StreamController<Position> positions) async {
     positions.add(pos(55.0, 12.0));
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('recenter_button')), findsNothing);
-
-    // A later fix that lands inside the bottom panel's footprint — on the map,
-    // and well clear of the screen edges, but hidden behind the panel.
+    await panMap(tester);
     final panel = tester.getRect(find.byType(BackdropFilter));
     final camera = cameraControllerOf(tester).camera;
     final behindPanel =
         camera.screenOffsetToLatLng(Offset(panel.center.dx, panel.top + 6));
     positions.add(pos(behindPanel.latitude, behindPanel.longitude));
     await tester.pumpAndSettle();
+    return behindPanel;
+  }
+
+  testWidgets(
+      'recentre chip appears when follow is off and the dot is hidden '
+      'behind the bottom panel', (tester) async {
+    final positions = StreamController<Position>();
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    // While follow is on the dot is pinned to the centre — no chip, even as
+    // fixes stream in.
+    positions.add(pos(55.0, 12.0));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('recenter_button')), findsNothing);
+
+    await parkDotBehindPanel(tester, positions);
 
     expect(find.byKey(const Key('recenter_button')), findsOneWidget);
+
+    await positions.close();
+  });
+
+  testWidgets('tapping the recentre chip re-engages follow', (tester) async {
+    final positions = StreamController<Position>();
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    final behindPanel = await parkDotBehindPanel(tester, positions);
+
+    await tester.tap(find.byKey(const Key('recenter_button')));
+    await tester.pumpAndSettle();
+
+    // The chip recentred on the dot immediately...
+    var camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(behindPanel.latitude, 0.0001));
+    expect(camera.center.longitude, closeTo(behindPanel.longitude, 0.0001));
+    expect(find.byKey(const Key('recenter_button')), findsNothing);
+
+    // ...and follow is engaged again, not a one-shot: the next fix recentres.
+    positions.add(pos(55.2, 12.2));
+    await tester.pumpAndSettle();
+
+    camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(55.2, 0.0001));
+    expect(camera.center.longitude, closeTo(12.2, 0.0001));
 
     await positions.close();
   });
@@ -846,6 +943,45 @@ void main() {
     final camera = cameraControllerOf(tester).camera;
     expect(camera.visibleBounds.contains(const LatLng(55.700, 12.590)), isTrue);
     expect(camera.visibleBounds.contains(const LatLng(55.710, 12.600)), isTrue);
+  });
+
+  testWidgets(
+      'follow is suspended while the summary shows and DONE re-engages it',
+      (tester) async {
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+    // Broadcast: the preview stream is subscribed twice (screen open, and
+    // again after the walk ends).
+    final positions = StreamController<Position>.broadcast();
+    addTearDown(positions.close);
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    // A fix arriving during the summary must not steal the camera from the
+    // route fit.
+    positions.add(pos(40.7128, -74.0060));
+    await tester.pumpAndSettle();
+    var camera = cameraControllerOf(tester).camera;
+    expect(camera.visibleBounds.contains(const LatLng(55.700, 12.590)), isTrue);
+    expect(camera.visibleBounds.contains(const LatLng(55.710, 12.600)), isTrue);
+
+    await tester.tap(find.byKey(const Key('done_button')));
+    await tester.pumpAndSettle();
+
+    // DONE puts the camera straight back on the user...
+    camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(40.7128, 0.0001));
+    expect(camera.center.longitude, closeTo(-74.0060, 0.0001));
+
+    // ...with follow engaged again for later fixes.
+    positions.add(pos(34.0522, -118.2437));
+    await tester.pumpAndSettle();
+    camera = cameraControllerOf(tester).camera;
+    expect(camera.center.latitude, closeTo(34.0522, 0.0001));
+    expect(camera.center.longitude, closeTo(-118.2437, 0.0001));
   });
 
   testWidgets('live location dot is hidden while the summary is showing',

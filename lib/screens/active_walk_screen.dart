@@ -72,23 +72,24 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   // the user taps Done.
   Walk? _completedWalk;
 
-  // One-shot auto-centre: when GPS goes from no-signal to its first fix, move
-  // the camera onto the user once. Deliberately NOT sticky — we don't re-centre
-  // on later updates (that would hijack the camera and fight the user panning),
-  // and we don't re-centre after a signal loss/regain. The manual recentre chip
-  // covers those cases.
-  bool _hasAutoCentered = false;
+  // Camera follow: while engaged, every position fix recentres the camera on
+  // the user (centre only — zoom stays whatever the user set). Any explicit
+  // map gesture disengages it (see onPositionChanged; our own programmatic
+  // moves report hasGesture=false and don't). The recentre chip and the
+  // summary's Done button re-engage it.
+  bool _followEnabled = true;
 
-  // Centre the camera on the first acquired fix, once. Guards camera access the
-  // same way [_positionOutOfView] does: if the map isn't laid out yet the move
-  // throws, and we leave [_hasAutoCentered] false so a later fix retries.
-  void _maybeAutoCentre(LatLng position) {
-    if (_hasAutoCentered) return;
+  // Centre the camera on the fix while follow is engaged. Skipped during the
+  // completed-walk summary so follow doesn't fight [_fitCompletedRoute];
+  // [_dismissCompleted] picks it back up. Camera access throws before the
+  // map's first layout, so swallow and let the next fix retry — same guard
+  // as [_positionOutOfView].
+  void _followPosition(LatLng position) {
+    if (!_followEnabled || _completedWalk != null) return;
     try {
       _mapController.move(position, _mapController.camera.zoom);
-      _hasAutoCentered = true;
     } catch (_) {
-      // Map not ready; retry on the next fix.
+      // Map not laid out yet; the next fix retries.
     }
   }
 
@@ -125,7 +126,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         _recorderState = widget.recorder.state;
         if (last != null) _currentPosition = LatLng(last.lat, last.lng);
       });
-      if (last != null) _maybeAutoCentre(LatLng(last.lat, last.lng));
+      if (last != null) _followPosition(LatLng(last.lat, last.lng));
     });
     // Deferred to after the first frame: the foreground-location disclosure
     // dialog needs localizations and a Navigator, neither of which are
@@ -167,7 +168,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   }
 
   // Subscribes the pre-recording live-preview location stream that drives the
-  // blue dot (and one-shot auto-centre) while the walk hasn't started yet. Must
+  // blue dot (and camera follow) while the walk hasn't started yet. Must
   // not run concurrently with recording: geolocator keeps a single cached
   // position stream, so a live preview would shadow the recorder's foreground
   // stream (see [_onStart]). Cancels any existing preview first so it's safe to
@@ -179,7 +180,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       if (!mounted) return;
       final latlng = LatLng(pos.latitude, pos.longitude);
       setState(() => _currentPosition = latlng);
-      _maybeAutoCentre(latlng);
+      _followPosition(latlng);
     }, onError: (Object e) {
       // Preview only drives the blue dot; log rather than let e.g. a
       // LocationServiceDisabledException surface as an unhandled async error.
@@ -195,7 +196,10 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     super.dispose();
   }
 
+  // Re-engages follow (not a one-shot move): the jump below puts the user
+  // back on screen now, and every later fix keeps them there.
   Future<void> _onRecentre() async {
+    setState(() => _followEnabled = true);
     if (_currentPosition != null) {
       _mapController.move(_currentPosition!, _mapController.camera.zoom);
       return;
@@ -405,7 +409,16 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       const [];
 
   void _dismissCompleted() {
-    setState(() => _completedWalk = null);
+    setState(() {
+      _completedWalk = null;
+      // Back to idle, follow resumes — even after a gesture during the
+      // summary; Done means "I'm finished looking at the route".
+      _followEnabled = true;
+    });
+    // The camera is still on the route fit; put it back on the user now
+    // rather than waiting for the next fix.
+    final position = _currentPosition;
+    if (position != null) _followPosition(position);
   }
 
   void _viewCompletedRoute() {
@@ -461,7 +474,12 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
             options: MapOptions(
               initialCenter: const LatLng(55.6761, 12.5683),
               initialZoom: 17,
-              onPositionChanged: (_, __) => setState(() {}),
+              // Only explicit user gestures disengage follow — our own follow
+              // moves and the completion route fit arrive with
+              // hasGesture=false.
+              onPositionChanged: (_, hasGesture) => setState(() {
+                if (hasGesture) _followEnabled = false;
+              }),
             ),
             children: [
               TileLayer(
@@ -571,11 +589,14 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
               ],
             ),
           ),
-          // Re-centre — top right, only when dot is off-screen. Suppressed
-          // while the summary shows: the camera is deliberately on the route,
-          // not the user, so the chip would be pure noise there.
+          // Re-centre — top right, only when follow is disengaged and the dot
+          // has drifted off-screen; tapping re-engages follow. While follow is
+          // on the dot is pinned to the centre, so the chip never shows.
+          // Suppressed while the summary shows: the camera is deliberately on
+          // the route, not the user, so the chip would be pure noise there.
           if (_completedWalk == null &&
               _locationPermissionGranted &&
+              !_followEnabled &&
               _positionOutOfView)
             Positioned(
               top: topPadding,
