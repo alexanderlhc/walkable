@@ -9,6 +9,9 @@
   "actionCancel": "Cancel",
   "actionFinish": "Finish",
   "actionRecenter": "Recenter map",
+  "actionDone": "Done",
+  "actionViewRoute": "View route",
+  "actionShare": "Share",
   "statDistance": "Distance",
   "statElapsed": "Elapsed",
   "statDuration": "Duration",
@@ -44,6 +47,17 @@
   "statusRecording": "Recording",
   "statusPaused": "Paused",
   "statusConfirmStop": "Finish walk?",
+  "walkCompleteTitle": "Walk complete",
+  "walkCompleteSubtitle": "Nice one — your walk has been saved.",
+  "markerStart": "Start",
+  "markerFinish": "Finish",
+  "shareWalkSummary": "I walked {distance} in {duration} with Walkable",
+  "@shareWalkSummary": {
+    "placeholders": {
+      "distance": { "type": "String" },
+      "duration": { "type": "String" }
+    }
+  },
   "locationError": "Could not get location: {error}",
   "@locationError": {
     "placeholders": {

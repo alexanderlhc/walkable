@@ -175,8 +175,8 @@ void main() {
     expect(recorder.state, RecorderState.recording);
   });
 
-  test('stop from idle does nothing', () async {
-    await recorder.stop();
+  test('stop from idle does nothing and returns no walk', () async {
+    expect(await recorder.stop(), isNull);
     expect(recorder.state, RecorderState.idle);
   });
 
@@ -184,6 +184,25 @@ void main() {
     await recorder.start();
     await recorder.stop();
     expect(recorder.state, RecorderState.stopped);
+  });
+
+  test('stop returns the saved walk hydrated with its coordinates', () async {
+    await recorder.start();
+    location.emit(_pos(55.676, 12.568));
+    location.emit(_pos(55.677, 12.569));
+    await Future<void>.delayed(Duration.zero);
+    clock.advance(const Duration(seconds: 30));
+
+    final walk = await recorder.stop();
+
+    expect(walk, isNotNull);
+    expect(walk!.endTime, isNotNull);
+    expect(walk.duration, const Duration(seconds: 30));
+    expect(walk.distanceMetres, greaterThan(0));
+    expect(walk.coordinates.length, 2);
+    // And it is the walk the repository now lists — not a detached copy.
+    final listed = await repository.findAll();
+    expect(listed.single.id, walk.id);
   });
 
   test('reset after stop returns to idle', () async {
@@ -436,7 +455,8 @@ void main() {
       location.emit(_pos(55.676, 12.568));
       await Future<void>.delayed(Duration.zero);
 
-      await recorder.stop(); // must complete without throwing
+      // Must complete without throwing; no walk was saved to return.
+      expect(await recorder.stop(), isNull);
       expect(recorder.state, RecorderState.stopped);
 
       // The failed walk never reached the database.
@@ -471,7 +491,8 @@ void main() {
       await Future<void>.delayed(Duration.zero);
 
       flaky.failFinishWalk = true;
-      await recorder.stop(); // must complete without throwing
+      // Must complete without throwing; the unfinished walk isn't returned.
+      expect(await recorder.stop(), isNull);
       expect(recorder.state, RecorderState.stopped);
 
       // The walk row exists but was never finished, so history excludes it.

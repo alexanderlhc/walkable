@@ -134,6 +134,10 @@ void main() {
     await tester.tap(find.byKey(const Key('stop_button')));
     await _hold(tester, const Duration(milliseconds: 1200)); // Cancel / Finish
     await tester.tap(find.byKey(const Key('confirm_stop_button')));
+    // The completed summary: camera fits the whole route, start/finish
+    // markers, final stats with Done / View route / Share.
+    await _hold(tester, const Duration(seconds: 4));
+    await tester.tap(find.byKey(const Key('done_button')));
     await _hold(tester, const Duration(seconds: 2)); // back to idle home
   });
 }

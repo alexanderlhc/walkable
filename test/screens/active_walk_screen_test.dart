@@ -8,10 +8,12 @@ import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
+import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
 import 'package:walkable/screens/settings_screen.dart';
+import 'package:walkable/screens/walk_detail_screen.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/walk_recorder.dart';
 import 'package:walkable/walk_stats.dart';
@@ -51,7 +53,7 @@ void main() {
     when(() =>
             recorder.resume(foregroundConsent: any(named: 'foregroundConsent')))
         .thenAnswer((_) async {});
-    when(() => recorder.stop()).thenAnswer((_) async {});
+    when(() => recorder.stop()).thenAnswer((_) async => null);
     when(() => recorder.reset()).thenReturn(null);
 
     when(() => locationService.checkAndRequestPermission(
@@ -65,8 +67,11 @@ void main() {
 
   tearDown(() => snapshotsCtrl.close());
 
-  Future<Widget> buildSubject(
-      {Locale? locale, int recoveredWalkCount = 0}) async {
+  Future<Widget> buildSubject({
+    Locale? locale,
+    int recoveredWalkCount = 0,
+    Future<void> Function(String text)? shareText,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
     settingsController = SettingsController(SettingsRepository(prefs))..load();
     return MaterialApp(
@@ -78,6 +83,8 @@ void main() {
         repository: repository,
         settingsController: settingsController,
         recoveredWalkCount: recoveredWalkCount,
+        // Never hit the real share_plus platform channel in widget tests.
+        shareText: shareText ?? (_) async {},
       ),
     );
   }
@@ -598,8 +605,11 @@ void main() {
 
   // ─── stop ──────────────────────────────────────────────────────────────────
 
-  testWidgets('tapping Stop calls stop and reset, returns to idle',
-      (tester) async {
+  testWidgets(
+      'tapping Stop calls stop and reset, returns straight to idle when '
+      'no walk was saved', (tester) async {
+    // The default stop() stub returns null (nothing saved): the screen must
+    // skip the completed summary and fall back to idle.
     await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
 
@@ -751,5 +761,169 @@ void main() {
     expect(find.byKey(const Key('recenter_button')), findsOneWidget);
 
     await positions.close();
+  });
+
+  // ─── completed summary ─────────────────────────────────────────────────────
+
+  // The walk stop() reports as saved: 2.4 km in 28 min between two fixes
+  // north-east of the hardcoded Copenhagen map centre.
+  Walk finishedWalk() => Walk(
+        id: 'walk-1',
+        startTime: DateTime(2026, 7, 1, 9),
+        endTime: DateTime(2026, 7, 1, 9, 28),
+        duration: const Duration(minutes: 28),
+        distanceMetres: 2400,
+        route: const [(lat: 55.700, lng: 12.590), (lat: 55.710, lng: 12.600)],
+        coordinates: [
+          Coordinate(
+              lat: 55.700, lng: 12.590, recordedAt: DateTime(2026, 7, 1, 9)),
+          Coordinate(
+              lat: 55.710,
+              lng: 12.600,
+              recordedAt: DateTime(2026, 7, 1, 9, 28)),
+        ],
+      );
+
+  // Runs the full start → stop → confirm Finish flow.
+  Future<void> finishWalkFlow(WidgetTester tester) async {
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('stop_button')));
+    await tester.pumpAndSettle();
+    when(() => recorder.state).thenReturn(RecorderState.idle);
+    await tester.tap(find.byKey(const Key('confirm_stop_button')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('finishing a walk shows the completed summary with final stats',
+      (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    expect(find.text('Walk complete'), findsOneWidget);
+    expect(find.byKey(const Key('done_button')), findsOneWidget);
+    expect(find.byKey(const Key('view_route_button')), findsOneWidget);
+    expect(find.byKey(const Key('share_button')), findsOneWidget);
+    expect(find.byKey(const Key('start_button')), findsNothing);
+
+    // Final stats come from the saved walk, not the live snapshot.
+    expect(find.text('DISTANCE'), findsOneWidget);
+    expect(find.text('DURATION'), findsOneWidget);
+    expect(find.text('PACE'), findsOneWidget);
+    expect(find.textContaining('2.40', findRichText: true), findsOneWidget);
+    expect(find.textContaining('28:00', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('completed summary draws start and finish markers on the route',
+      (tester) async {
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    expect(find.text('START'), findsOneWidget);
+    expect(find.text('FINISH'), findsOneWidget);
+  });
+
+  testWidgets('completed summary fits the camera to the finished route',
+      (tester) async {
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    // The camera left the hardcoded Copenhagen centre for the route (fit runs
+    // two frames after the summary appears; pumpAndSettle covers both). The
+    // exact centre depends on the panel inset, so assert what actually
+    // matters: both route ends are inside the visible bounds.
+    final camera = cameraControllerOf(tester).camera;
+    expect(camera.visibleBounds.contains(const LatLng(55.700, 12.590)), isTrue);
+    expect(camera.visibleBounds.contains(const LatLng(55.710, 12.600)), isTrue);
+  });
+
+  testWidgets('live location dot is hidden while the summary is showing',
+      (tester) async {
+    // Same rationale as the suppressed re-centre chip: the camera is on the
+    // route, not the user, and the dot sits on the last fix where it would
+    // swallow the finish marker.
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+    final positions = StreamController<Position>.broadcast();
+    addTearDown(positions.close);
+    when(() => locationService.watchPosition())
+        .thenAnswer((_) => positions.stream);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    positions.add(pos(55.6761, 12.5683));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircleLayer), findsOneWidget,
+        reason: 'the live dot shows once a fix arrives');
+
+    await finishWalkFlow(tester);
+    expect(find.byType(CircleLayer), findsNothing);
+
+    await tester.tap(find.byKey(const Key('done_button')));
+    await tester.pumpAndSettle();
+    expect(find.byType(CircleLayer), findsOneWidget,
+        reason: 'the live dot returns once the summary is dismissed');
+  });
+
+  testWidgets('DONE dismisses the summary back to idle', (tester) async {
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    await tester.tap(find.byKey(const Key('done_button')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('start_button')), findsOneWidget);
+    expect(find.byKey(const Key('done_button')), findsNothing);
+    // The route markers leave with the summary. ('START' would also match the
+    // Start button label, so check the FINISH marker.)
+    expect(find.text('FINISH'), findsNothing);
+  });
+
+  testWidgets('VIEW ROUTE opens the walk detail screen for the saved walk',
+      (tester) async {
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    await tester.tap(find.byKey(const Key('view_route_button')));
+    await tester.pumpAndSettle();
+
+    final detail =
+        tester.widget<WalkDetailScreen>(find.byType(WalkDetailScreen));
+    expect(detail.walk.id, 'walk-1');
+  });
+
+  testWidgets('SHARE invokes the share action with the walk summary text',
+      (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+    final shared = <String>[];
+
+    await tester.pumpWidget(
+        await buildSubject(shareText: (text) async => shared.add(text)));
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    await tester.tap(find.byKey(const Key('share_button')));
+    await tester.pumpAndSettle();
+
+    expect(shared, ['I walked 2.40 km in 28:00 with Walkable']);
   });
 }
