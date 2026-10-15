@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -112,6 +113,30 @@ Map<LocationPermissionKind, RuntimePermission> defaultLocationPermissions() => {
       ),
     };
 
+/// Reports whether Android's Battery Saver is currently set to cut or throttle
+/// location while the screen is off. No permission or foreground service can
+/// override that mode, so all the app can do is warn the user.
+typedef BatterySaverCheck = Future<bool> Function();
+
+const _powerChannel = MethodChannel('walkable/power');
+
+/// Default [BatterySaverCheck], asking `PowerManager.getLocationPowerSaveMode()`
+/// through MainActivity. Restrictive are the screen-off modes:
+/// GPS_DISABLED_WHEN_SCREEN_OFF (1), ALL_DISABLED_WHEN_SCREEN_OFF (2) and
+/// THROTTLE_REQUESTS_WHEN_SCREEN_OFF (4). FOREGROUND_ONLY (3, the stock
+/// default) is harmless: the foreground service counts as foreground.
+/// Best-effort: any failure reads as "not restricted".
+Future<bool> defaultBatterySaverRestrictsLocation() async {
+  if (defaultTargetPlatform != TargetPlatform.android) return false;
+  try {
+    final mode = await _powerChannel.invokeMethod<int>('locationPowerSaveMode');
+    return mode == 1 || mode == 2 || mode == 4;
+  } catch (e) {
+    debugPrint('LocationService: battery saver check failed: $e');
+    return false;
+  }
+}
+
 class _DefaultGeolocator implements GeolocatorInterface {
   @override
   Future<LocationPermission> checkPermission() => Geolocator.checkPermission();
@@ -145,7 +170,10 @@ class LocationService {
   LocationService({
     GeolocatorInterface? geolocator,
     Map<LocationPermissionKind, RuntimePermission>? permissions,
+    BatterySaverCheck? batterySaverRestrictsLocation,
   })  : _geolocator = geolocator ?? _DefaultGeolocator(),
+        _batterySaverCheck = batterySaverRestrictsLocation ??
+            defaultBatterySaverRestrictsLocation,
         // Merge any injected overrides over the defaults so the map is always
         // complete — callers (and tests) can supply just the roles they care
         // about.
@@ -153,6 +181,7 @@ class LocationService {
 
   final GeolocatorInterface _geolocator;
   final Map<LocationPermissionKind, RuntimePermission> _permissions;
+  final BatterySaverCheck _batterySaverCheck;
   final StreamController<Position> _controller =
       StreamController<Position>.broadcast();
   StreamSubscription<Position>? _subscription;
@@ -160,6 +189,7 @@ class LocationService {
   bool _notificationsGranted = true;
   bool _backgroundGranted = true;
   bool _batteryOptimizationGranted = true;
+  bool _batterySaverRestrictsLocation = false;
 
   Stream<Position> get positions => _controller.stream;
   bool get isRunning => _running;
@@ -178,6 +208,11 @@ class LocationService {
   /// [start]. When `false`, Android's Doze mode may suspend GPS even with a
   /// foreground service running, causing gaps or total loss of tracking.
   bool get batteryOptimizationGranted => _batteryOptimizationGranted;
+
+  /// Whether Battery Saver was set to cut location with the screen off at the
+  /// most recent [start]. When `true`, the walk will have gaps while the
+  /// screen is locked and the user should be warned.
+  bool get batterySaverRestrictsLocation => _batterySaverRestrictsLocation;
 
   /// Opens the OS app settings so the user can re-enable a denied permission.
   Future<void> openSettings() => openAppSettings();
@@ -264,6 +299,8 @@ class LocationService {
     _batteryOptimizationGranted =
         await _permissions[LocationPermissionKind.batteryOptimization]!
             .ensureGranted();
+
+    _batterySaverRestrictsLocation = await _batterySaverCheck();
 
     _running = true;
     _subscription = _geolocator

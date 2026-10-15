@@ -356,6 +356,36 @@ abstract class AppLocalizations {
   /// **'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.'**
   String get batteryOptimizationWarning;
 
+  /// No description provided for @batterySaverLocationWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Saver turns off location while the screen is locked, so your walk may have gaps. Turn Battery Saver off, or keep the screen on.'**
+  String get batterySaverLocationWarning;
+
+  /// No description provided for @leaveWalkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Walk in progress'**
+  String get leaveWalkTitle;
+
+  /// No description provided for @leaveWalkBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Your walk is still recording. Keep recording, or stop and save it?'**
+  String get leaveWalkBody;
+
+  /// No description provided for @leaveWalkKeepRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep recording'**
+  String get leaveWalkKeepRecording;
+
+  /// No description provided for @leaveWalkStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop walk'**
+  String get leaveWalkStop;
+
   /// No description provided for @openSettings.
   ///
   /// In en, this message translates to:
@@ -367,6 +397,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recording'**
   String get statusRecording;
+
+  /// No description provided for @statusNoSignal.
+  ///
+  /// In en, this message translates to:
+  /// **'No GPS signal'**
+  String get statusNoSignal;
 
   /// No description provided for @statusPaused.
   ///

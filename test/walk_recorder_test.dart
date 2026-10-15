@@ -394,8 +394,11 @@ void main() {
     expect(latest!.stats.distanceMetres, 0);
   });
 
-  test('position stream error pauses the walk instead of going unhandled',
-      () async {
+  test(
+      'position stream error keeps recording, flags signal loss until the '
+      'next fix', () async {
+    final snapshots = <WalkSnapshot>[];
+    final sub = recorder.snapshots.listen(snapshots.add);
     await recorder.start();
     location.emit(_pos(55.676, 12.568));
     await Future<void>.delayed(Duration.zero);
@@ -403,7 +406,20 @@ void main() {
     location.emitError(StateError('location services disabled'));
     await Future<void>.delayed(Duration.zero);
 
-    expect(recorder.state, RecorderState.paused);
+    // Pausing here once stopped the foreground service for the rest of the
+    // walk over a momentary glitch; the walk must keep going instead.
+    expect(recorder.state, RecorderState.recording);
+    expect(snapshots.last.signalLost, isTrue);
+
+    // Location comes back: fixes keep arriving on the same subscription.
+    location.emit(_pos(55.677, 12.569));
+    await Future<void>.delayed(Duration.zero);
+    await sub.cancel();
+
+    expect(snapshots.last.signalLost, isFalse);
+    expect(snapshots.last.polyline.length, 2);
+    final walk = await recorder.stop();
+    expect(walk!.coordinates.length, 2);
   });
 
   test('stop emits final snapshot and saves walk to repository', () async {
