@@ -328,6 +328,14 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         ),
       );
     }
+    if (widget.recorder.locationService.batterySaverRestrictsLocation) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l10n.batterySaverLocationWarning),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    }
     if (!widget.recorder.locationService.batteryOptimizationGranted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -340,6 +348,32 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         ),
       );
     }
+  }
+
+  /// Back pressed mid-walk: keep recording (the default, also on dismiss) or
+  /// stop and save the walk, landing on the usual post-walk summary.
+  Future<void> _confirmLeaveWalk() async {
+    final l10n = AppLocalizations.of(context)!;
+    final stop = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.leaveWalkTitle),
+        content: Text(l10n.leaveWalkBody),
+        actions: [
+          TextButton(
+            key: const Key('leave_walk_stop'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(l10n.leaveWalkStop),
+          ),
+          FilledButton(
+            key: const Key('leave_walk_keep'),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(l10n.leaveWalkKeepRecording),
+          ),
+        ],
+      ),
+    );
+    if (stop == true && mounted) await _onStop();
   }
 
   Future<void> _onPause() async {
@@ -466,155 +500,164 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
 
     final topPadding = MediaQuery.of(context).padding.top + 12;
 
-    return Scaffold(
-      body: Stack(
-        children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: const LatLng(55.6761, 12.5683),
-              initialZoom: 17,
-              // Only explicit user gestures disengage follow — our own follow
-              // moves and the completion route fit arrive with
-              // hasGesture=false.
-              onPositionChanged: (_, hasGesture) => setState(() {
-                if (hasGesture) _followEnabled = false;
-              }),
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: mapTileUrl(Theme.of(context).brightness),
-                subdomains: mapTileSubdomains,
-                userAgentPackageName: 'dk.alexanderlhc.walkable',
+    // This is the app's root route, so a system Back during a walk would
+    // finish the activity — and with it the Flutter engine and the location
+    // service, silently ending the recording. Ask first instead.
+    return PopScope(
+      canPop: _recorderState == RecorderState.idle,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmLeaveWalk();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: const LatLng(55.6761, 12.5683),
+                initialZoom: 17,
+                // Only explicit user gestures disengage follow — our own follow
+                // moves and the completion route fit arrive with
+                // hasGesture=false.
+                onPositionChanged: (_, hasGesture) => setState(() {
+                  if (hasGesture) _followEnabled = false;
+                }),
               ),
-              if (points.length >= 2)
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: points,
-                      strokeWidth: 4,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ],
+              children: [
+                TileLayer(
+                  urlTemplate: mapTileUrl(Theme.of(context).brightness),
+                  subdomains: mapTileSubdomains,
+                  userAgentPackageName: 'dk.alexanderlhc.walkable',
                 ),
-              // The live dot is suppressed while the summary shows, for the
-              // same reason as the re-centre chip below: the camera is on the
-              // route, and the dot sits on the last fix where it swallows the
-              // finish marker.
-              if (_completedWalk == null && _currentPosition != null)
-                CircleLayer(
-                  circles: [
-                    CircleMarker(
-                      point: _currentPosition!,
-                      radius: 8,
-                      color: Theme.of(context).colorScheme.primary,
-                      borderStrokeWidth: 2,
-                      borderColor: Theme.of(context).colorScheme.surface,
-                    ),
-                  ],
-                ),
-              if (completedPoints.length >= 2)
-                MarkerLayer(
-                  markers: [
-                    _routeEndMarker(
-                      completedPoints.first,
-                      l10n.markerStart.toUpperCase(),
-                      WalkStatusColors.of(context).recording,
-                    ),
-                    _routeEndMarker(
-                      completedPoints.last,
-                      l10n.markerFinish.toUpperCase(),
-                      Theme.of(context).colorScheme.error,
-                    ),
-                  ],
-                ),
-            ],
-          ),
-          _BottomPanel(
-            state: _recorderState,
-            snapshot: _snapshot,
-            units: units,
-            completedWalk: _completedWalk,
-            onDismissCompleted: _dismissCompleted,
-            onViewRoute: _viewCompletedRoute,
-            onShare: _shareCompletedWalk,
-            onStart: _onStart,
-            onPause: _onPause,
-            onResume: _onResume,
-            onStop: _onStop,
-            onHeightChanged: (height) {
-              if (mounted && height != _bottomPanelHeight) {
-                setState(() => _bottomPanelHeight = height);
-              }
-            },
-          ),
-          // Menu pill — top left. History and Settings live in here so the
-          // map stays as empty as possible.
-          Positioned(
-            top: topPadding,
-            left: 12,
-            child: MenuAnchor(
-              builder: (context, menu, _) => _MapChip(
-                key: const Key('menu_button'),
-                onPressed: () => menu.isOpen ? menu.close() : menu.open(),
-                semanticLabel: l10n.navMenu,
-                icon: const Icon(Icons.menu, size: 18),
-              ),
-              menuChildren: [
-                MenuItemButton(
-                  key: const Key('history_button'),
-                  leadingIcon: const Icon(Icons.history),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => WalkHistoryScreen(
-                        repository: widget.repository,
-                        settingsController: widget.settingsController,
+                if (points.length >= 2)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: points,
+                        strokeWidth: 4,
+                        color: Theme.of(context).colorScheme.primary,
                       ),
-                    ),
+                    ],
                   ),
-                  child: Text(l10n.navHistory),
-                ),
-                MenuItemButton(
-                  key: const Key('settings_button'),
-                  leadingIcon: const Icon(Icons.settings),
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => SettingsScreen(
-                        controller: widget.settingsController,
+                // The live dot is suppressed while the summary shows, for the
+                // same reason as the re-centre chip below: the camera is on the
+                // route, and the dot sits on the last fix where it swallows the
+                // finish marker.
+                if (_completedWalk == null && _currentPosition != null)
+                  CircleLayer(
+                    circles: [
+                      CircleMarker(
+                        point: _currentPosition!,
+                        radius: 8,
+                        color: Theme.of(context).colorScheme.primary,
+                        borderStrokeWidth: 2,
+                        borderColor: Theme.of(context).colorScheme.surface,
                       ),
-                    ),
+                    ],
                   ),
-                  child: Text(l10n.screenSettings),
-                ),
+                if (completedPoints.length >= 2)
+                  MarkerLayer(
+                    markers: [
+                      _routeEndMarker(
+                        completedPoints.first,
+                        l10n.markerStart.toUpperCase(),
+                        WalkStatusColors.of(context).recording,
+                      ),
+                      _routeEndMarker(
+                        completedPoints.last,
+                        l10n.markerFinish.toUpperCase(),
+                        Theme.of(context).colorScheme.error,
+                      ),
+                    ],
+                  ),
               ],
             ),
-          ),
-          // Re-centre — top right, only when follow is disengaged and the dot
-          // has drifted off-screen; tapping re-engages follow. While follow is
-          // on the dot is pinned to the centre, so the chip never shows.
-          // Suppressed while the summary shows: the camera is deliberately on
-          // the route, not the user, so the chip would be pure noise there.
-          if (_completedWalk == null &&
-              _locationPermissionGranted &&
-              !_followEnabled &&
-              _positionOutOfView)
+            _BottomPanel(
+              state: _recorderState,
+              snapshot: _snapshot,
+              units: units,
+              completedWalk: _completedWalk,
+              onDismissCompleted: _dismissCompleted,
+              onViewRoute: _viewCompletedRoute,
+              onShare: _shareCompletedWalk,
+              onStart: _onStart,
+              onPause: _onPause,
+              onResume: _onResume,
+              onStop: _onStop,
+              onHeightChanged: (height) {
+                if (mounted && height != _bottomPanelHeight) {
+                  setState(() => _bottomPanelHeight = height);
+                }
+              },
+            ),
+            // Menu pill — top left. History and Settings live in here so the
+            // map stays as empty as possible.
             Positioned(
               top: topPadding,
-              right: 12,
-              child: _MapChip(
-                key: const Key('recenter_button'),
-                onPressed: _recentring ? null : _onRecentre,
-                semanticLabel: l10n.actionRecenter,
-                icon: _recentring
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.my_location, size: 18),
+              left: 12,
+              child: MenuAnchor(
+                builder: (context, menu, _) => _MapChip(
+                  key: const Key('menu_button'),
+                  onPressed: () => menu.isOpen ? menu.close() : menu.open(),
+                  semanticLabel: l10n.navMenu,
+                  icon: const Icon(Icons.menu, size: 18),
+                ),
+                menuChildren: [
+                  MenuItemButton(
+                    key: const Key('history_button'),
+                    leadingIcon: const Icon(Icons.history),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WalkHistoryScreen(
+                          repository: widget.repository,
+                          settingsController: widget.settingsController,
+                        ),
+                      ),
+                    ),
+                    child: Text(l10n.navHistory),
+                  ),
+                  MenuItemButton(
+                    key: const Key('settings_button'),
+                    leadingIcon: const Icon(Icons.settings),
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SettingsScreen(
+                          controller: widget.settingsController,
+                        ),
+                      ),
+                    ),
+                    child: Text(l10n.screenSettings),
+                  ),
+                ],
               ),
             ),
-        ],
+            // Re-centre — top right, only when follow is disengaged and the dot
+            // has drifted off-screen; tapping re-engages follow. While follow is
+            // on the dot is pinned to the centre, so the chip never shows.
+            // Suppressed while the summary shows: the camera is deliberately on
+            // the route, not the user, so the chip would be pure noise there.
+            if (_completedWalk == null &&
+                _locationPermissionGranted &&
+                !_followEnabled &&
+                _positionOutOfView)
+              Positioned(
+                top: topPadding,
+                right: 12,
+                child: _MapChip(
+                  key: const Key('recenter_button'),
+                  onPressed: _recentring ? null : _onRecentre,
+                  semanticLabel: l10n.actionRecenter,
+                  icon: _recentring
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.my_location, size: 18),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -920,6 +963,9 @@ class _BottomPanelState extends State<_BottomPanel> {
     final cs = Theme.of(context).colorScheme;
     final status = WalkStatusColors.of(context);
     final isRecording = widget.state == RecorderState.recording;
+    // Still recording, but the location stream errored and no fix has come in
+    // since — shown amber so a gap in the route isn't a surprise.
+    final signalLost = isRecording && (widget.snapshot?.signalLost ?? false);
     final stats = widget.snapshot?.stats ??
         WalkStats.fromParts(coordinates: const [], duration: Duration.zero);
 
@@ -937,16 +983,20 @@ class _BottomPanelState extends State<_BottomPanel> {
                 shape: BoxShape.circle,
                 // Conventional recorder semantics (green = recording, amber =
                 // paused), kept theme-aware via the WalkStatusColors extension.
-                color: isRecording ? status.recording : status.paused,
+                color: isRecording && !signalLost
+                    ? status.recording
+                    : status.paused,
               ),
             ),
             const SizedBox(width: 6),
             Text(
               (_confirmingStop
                       ? l10n.statusConfirmStop
-                      : (isRecording
-                          ? l10n.statusRecording
-                          : l10n.statusPaused))
+                      : signalLost
+                          ? l10n.statusNoSignal
+                          : (isRecording
+                              ? l10n.statusRecording
+                              : l10n.statusPaused))
                   .toUpperCase(),
               style: TextStyle(
                 color: cs.onSurfaceVariant,

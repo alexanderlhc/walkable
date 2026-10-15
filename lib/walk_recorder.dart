@@ -17,7 +17,16 @@ class WalkSnapshot {
   /// The route so far, for drawing the live track.
   final List<Coord> polyline;
 
-  const WalkSnapshot({required this.stats, required this.polyline});
+  /// Whether the location stream reported an error (e.g. location switched
+  /// off, or a power-saving mode cutting GPS) and no fix has arrived since.
+  /// Recording carries on regardless; this only lets the UI say so.
+  final bool signalLost;
+
+  const WalkSnapshot({
+    required this.stats,
+    required this.polyline,
+    this.signalLost = false,
+  });
 }
 
 class WalkRecorder {
@@ -52,6 +61,8 @@ class WalkRecorder {
   DateTime? _lastProgressPersist;
   Duration _accumulatedDuration = Duration.zero;
   final List<Coordinate> _coordinates = [];
+  // Set by a position stream error, cleared by the next fix. See [_onError].
+  bool _signalLost = false;
   StreamSubscription<Position>? _subscription;
   Timer? _ticker;
   ForegroundNotificationText? _notification;
@@ -117,6 +128,7 @@ class WalkRecorder {
     final now = _now();
     _accumulatedDuration += now.difference(_periodStart!);
     _periodStart = null;
+    _signalLost = false;
     _state = RecorderState.paused;
     _ticker?.cancel();
     _ticker = null;
@@ -234,6 +246,7 @@ class WalkRecorder {
     _periodStart = null;
     _lastProgressPersist = null;
     _accumulatedDuration = Duration.zero;
+    _signalLost = false;
     _coordinates.clear();
     _persist = Future<void>.value();
     // Emit a cleared snapshot so listeners drop the finished walk's polyline
@@ -250,13 +263,17 @@ class WalkRecorder {
   }
 
   /// Errors forwarded by [LocationService.positions] (e.g. location services
-  /// toggled off mid-walk). Pause instead of silently truncating the walk with
-  /// the timer still counting; pause() also emits a snapshot so the UI reacts.
+  /// toggled off mid-walk, or a power-saving mode cutting GPS while the screen
+  /// is locked). Keep recording: the error doesn't end the platform location
+  /// request, so fixes resume on their own once location is back. Pausing
+  /// here used to stop the foreground service for good, silently losing the
+  /// rest of a walk over a momentary glitch the user — phone in pocket —
+  /// never saw. Flag the gap instead so the UI can show it.
   void _onError(Object error) {
     debugPrint('WalkRecorder: position stream error: $error');
-    if (_state == RecorderState.recording) {
-      unawaited(pause());
-    }
+    if (_state != RecorderState.recording || _signalLost) return;
+    _signalLost = true;
+    _snapshots.add(_buildSnapshot(_now()));
   }
 
   void _onPosition(Position pos) {
@@ -267,6 +284,7 @@ class WalkRecorder {
     );
     final index = _coordinates.length;
     _coordinates.add(coord);
+    _signalLost = false;
     _snapshots.add(_buildSnapshot(_now()));
 
     // Persist this point immediately, serialized after earlier writes.
@@ -296,6 +314,7 @@ class WalkRecorder {
       stats:
           WalkStats.fromParts(coordinates: polyline, duration: _elapsedAt(now)),
       polyline: polyline,
+      signalLost: _signalLost,
     );
   }
 

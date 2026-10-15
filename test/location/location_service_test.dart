@@ -184,6 +184,31 @@ void main() {
       expect(service.batteryOptimizationGranted, isFalse);
     });
 
+    test('batterySaverRestrictsLocation reflects the Battery Saver check',
+        () async {
+      service.dispose();
+      service = LocationService(
+        geolocator: mock,
+        permissions: {
+          LocationPermissionKind.notification: notifications,
+          LocationPermissionKind.background: background,
+          LocationPermissionKind.batteryOptimization: batteryOptimization,
+        },
+        batterySaverRestrictsLocation: () async => true,
+      );
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.always);
+      when(
+        () => mock.getPositionStream(
+            locationSettings: any(named: 'locationSettings')),
+      ).thenAnswer((_) => const Stream.empty());
+
+      expect(service.batterySaverRestrictsLocation, isFalse);
+      await service.start();
+
+      expect(service.batterySaverRestrictsLocation, isTrue);
+    });
+
     test('returns running if already started', () async {
       when(() => mock.checkPermission())
           .thenAnswer((_) async => LocationPermission.always);

@@ -142,10 +142,30 @@ class AppLocalizationsEn extends AppLocalizations {
       'Battery optimisation is on, so your walk may stop recording when the screen is locked. Disable it in Settings.';
 
   @override
+  String get batterySaverLocationWarning =>
+      'Battery Saver turns off location while the screen is locked, so your walk may have gaps. Turn Battery Saver off, or keep the screen on.';
+
+  @override
+  String get leaveWalkTitle => 'Walk in progress';
+
+  @override
+  String get leaveWalkBody =>
+      'Your walk is still recording. Keep recording, or stop and save it?';
+
+  @override
+  String get leaveWalkKeepRecording => 'Keep recording';
+
+  @override
+  String get leaveWalkStop => 'Stop walk';
+
+  @override
   String get openSettings => 'Settings';
 
   @override
   String get statusRecording => 'Recording';
+
+  @override
+  String get statusNoSignal => 'No GPS signal';
 
   @override
   String get statusPaused => 'Paused';

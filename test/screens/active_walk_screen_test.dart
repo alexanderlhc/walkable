@@ -63,6 +63,7 @@ void main() {
         .thenAnswer((_) => const Stream.empty());
     when(() => locationService.notificationsGranted).thenReturn(true);
     when(() => locationService.batteryOptimizationGranted).thenReturn(true);
+    when(() => locationService.batterySaverRestrictsLocation).thenReturn(false);
   });
 
   tearDown(() => snapshotsCtrl.close());
@@ -444,6 +445,39 @@ void main() {
     expect(find.text('RECORDING'), findsOneWidget);
   });
 
+  testWidgets('NO GPS SIGNAL label replaces RECORDING while signal is lost',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    when(() => recorder.state).thenReturn(RecorderState.recording);
+
+    snapshotsCtrl.add(WalkSnapshot(
+      stats: const WalkStats(distanceMetres: 0, duration: Duration.zero),
+      polyline: const [],
+      signalLost: true,
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('NO GPS SIGNAL'), findsOneWidget);
+    expect(find.text('RECORDING'), findsNothing);
+  });
+
+  testWidgets('warns when Battery Saver cuts location with the screen off',
+      (tester) async {
+    when(() => locationService.batterySaverRestrictsLocation).thenReturn(true);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pump();
+
+    expect(find.textContaining('Battery Saver'), findsOneWidget);
+  });
+
   testWidgets('menu chip remains visible during recording', (tester) async {
     await tester.pumpWidget(await buildSubject());
     await tester.pumpAndSettle();
@@ -452,6 +486,54 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('menu_button')), findsOneWidget);
+  });
+
+  // ─── system Back during a walk ────────────────────────────────────────────
+
+  testWidgets('Back while recording asks instead of closing the app',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Walk in progress'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('leave_walk_keep')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Walk in progress'), findsNothing);
+    expect(find.text('RECORDING'), findsOneWidget);
+    verifyNever(() => recorder.stop());
+  });
+
+  testWidgets('Back while recording, then Stop walk, stops the recorder',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('leave_walk_stop')));
+    await tester.pumpAndSettle();
+
+    verify(() => recorder.stop()).called(1);
+    expect(find.byKey(const Key('start_button')), findsOneWidget);
+  });
+
+  testWidgets('Back while idle does not ask', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Walk in progress'), findsNothing);
   });
 
   // ─── paused state ──────────────────────────────────────────────────────────

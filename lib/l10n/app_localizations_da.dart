@@ -142,10 +142,30 @@ class AppLocalizationsDa extends AppLocalizations {
       'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
 
   @override
+  String get batterySaverLocationWarning =>
+      'Batterisparefunktionen slår placering fra, når skærmen er låst, så din gåtur kan få huller. Slå batterisparefunktionen fra, eller hold skærmen tændt.';
+
+  @override
+  String get leaveWalkTitle => 'Gåtur i gang';
+
+  @override
+  String get leaveWalkBody =>
+      'Din gåtur bliver stadig optaget. Vil du fortsætte, eller stoppe og gemme den?';
+
+  @override
+  String get leaveWalkKeepRecording => 'Fortsæt optagelse';
+
+  @override
+  String get leaveWalkStop => 'Stop gåtur';
+
+  @override
   String get openSettings => 'Indstillinger';
 
   @override
   String get statusRecording => 'Optager';
+
+  @override
+  String get statusNoSignal => 'Intet GPS-signal';
 
   @override
   String get statusPaused => 'På pause';
