@@ -313,7 +313,7 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
     await tester.pumpAndSettle();
 
-    expect(find.text('Stop gåtur automatisk'), findsOneWidget);
+    expect(find.text('Automatisk stop gåtur'), findsOneWidget);
     expect(find.text('Fra'), findsOneWidget);
     expect(find.text('Efter 1 time'), findsOneWidget);
     expect(find.text('Efter 2 timer'), findsOneWidget);

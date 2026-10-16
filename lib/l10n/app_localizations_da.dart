@@ -228,7 +228,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get settingsAutoStop => 'Stop gåtur automatisk';
+  String get settingsAutoStop => 'Automatisk stop gåtur';
 
   @override
   String get autoStopOff => 'Fra';
