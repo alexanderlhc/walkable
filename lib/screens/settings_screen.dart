@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
-import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/units.dart';
 
@@ -94,21 +94,21 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
             _SectionHeader(l10n.settingsAutoStop),
-            RadioGroup<Duration?>(
-              groupValue: controller.autoStopAfter,
-              onChanged: controller.setAutoStopAfter,
+            RadioGroup<AutoStopLimit?>(
+              groupValue: controller.autoStopLimit,
+              onChanged: controller.setAutoStopLimit,
               child: Column(
                 children: [
-                  RadioListTile<Duration?>(
+                  RadioListTile<AutoStopLimit?>(
                     key: const Key('auto_stop_off'),
                     value: null,
                     title: Text(l10n.autoStopOff),
                   ),
-                  for (final limit in autoStopLimits)
-                    RadioListTile<Duration?>(
-                      key: Key('auto_stop_${limit.inHours}h'),
+                  for (final limit in AutoStopLimit.values)
+                    RadioListTile<AutoStopLimit?>(
+                      key: Key('auto_stop_${limit.hours}h'),
                       value: limit,
-                      title: Text(l10n.autoStopAfterHours(limit.inHours)),
+                      title: Text(l10n.autoStopAfterHours(limit.hours)),
                     ),
                 ],
               ),

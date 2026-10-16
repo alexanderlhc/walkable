@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/screens/settings_screen.dart';
@@ -257,22 +258,22 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
     await tester.pumpAndSettle();
 
-    final group = tester
-        .widget<RadioGroup<Duration?>>(find.byType(RadioGroup<Duration?>));
+    final group = tester.widget<RadioGroup<AutoStopLimit?>>(
+        find.byType(RadioGroup<AutoStopLimit?>));
     expect(group.groupValue, isNull);
   });
 
   testWidgets('persisted auto-stop limit is the selected radio',
       (tester) async {
-    await setUpController({'auto_stop_after_minutes': 120});
+    await setUpController({'auto_stop_limit': 'twoHours'});
     await tester.pumpWidget(buildSubject());
     // The section sits below the fold; ListView builds it lazily.
     await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
     await tester.pumpAndSettle();
 
-    final group = tester
-        .widget<RadioGroup<Duration?>>(find.byType(RadioGroup<Duration?>));
-    expect(group.groupValue, const Duration(hours: 2));
+    final group = tester.widget<RadioGroup<AutoStopLimit?>>(
+        find.byType(RadioGroup<AutoStopLimit?>));
+    expect(group.groupValue, AutoStopLimit.twoHours);
   });
 
   testWidgets('tapping After 2 hours updates the controller and persists',
@@ -285,13 +286,13 @@ void main() {
     await tester.tap(find.byKey(const Key('auto_stop_2h')));
     await tester.pumpAndSettle();
 
-    expect(controller.autoStopAfter, const Duration(hours: 2));
+    expect(controller.autoStopLimit, AutoStopLimit.twoHours);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getInt('auto_stop_after_minutes'), 120);
+    expect(prefs.getString('auto_stop_limit'), 'twoHours');
   });
 
   testWidgets('tapping Off removes the stored auto-stop limit', (tester) async {
-    await setUpController({'auto_stop_after_minutes': 60});
+    await setUpController({'auto_stop_limit': 'oneHour'});
     await tester.pumpWidget(buildSubject());
 
     await tester.scrollUntilVisible(
@@ -300,9 +301,9 @@ void main() {
     await tester.tap(find.byKey(const Key('auto_stop_off')));
     await tester.pumpAndSettle();
 
-    expect(controller.autoStopAfter, isNull);
+    expect(controller.autoStopLimit, isNull);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.containsKey('auto_stop_after_minutes'), isFalse);
+    expect(prefs.containsKey('auto_stop_limit'), isFalse);
   });
 
   testWidgets('renders Danish auto-stop strings under the Danish locale',

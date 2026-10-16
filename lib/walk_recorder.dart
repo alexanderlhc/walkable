@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -29,14 +30,14 @@ class WalkSnapshot {
   });
 }
 
-/// The recorder stopped a walk by itself because its moving time reached the
-/// auto-stop [limit]. Carries the saved [walk] the way [WalkRecorder.stop]
-/// returns it: null when nothing could be saved.
-class SelfStop {
+/// The recorder auto-stopped a walk because its moving time reached [limit].
+/// Carries the saved [walk] the way [WalkRecorder.stop] returns it: null when
+/// nothing could be saved.
+class AutoStop {
   final Walk? walk;
-  final Duration limit;
+  final AutoStopLimit limit;
 
-  const SelfStop({required this.walk, required this.limit});
+  const AutoStop({required this.walk, required this.limit});
 }
 
 class WalkRecorder {
@@ -62,7 +63,7 @@ class WalkRecorder {
   // subscriptions/tickers).
   bool _starting = false;
 
-  // Set from the moment a stop (manual or self) begins until its save is done,
+  // Set from the moment a stop (manual or auto) begins until its save is done,
   // so nothing landing in its async gaps — another stop, pause/resume, or
   // reset() — can finalize the walk twice or clear it mid-save.
   bool _stopping = false;
@@ -75,9 +76,8 @@ class WalkRecorder {
   // [progressPersistInterval] instead of one per tick.
   DateTime? _lastProgressPersist;
   Duration _accumulatedDuration = Duration.zero;
-  // The moving time at which this walk stops itself, captured at start() so a
-  // settings change mid-walk applies from the next walk. Null means Off.
-  Duration? _autoStopAfter;
+  // This walk's auto-stop limit, captured at start(). Null means Off.
+  AutoStopLimit? _autoStopLimit;
   final List<Coordinate> _coordinates = [];
   // Set by a position stream error, cleared by the next fix. See [_onError].
   bool _signalLost = false;
@@ -92,12 +92,12 @@ class WalkRecorder {
       StreamController<WalkSnapshot>.broadcast();
   Stream<WalkSnapshot> get snapshots => _snapshots.stream;
 
-  final StreamController<SelfStop> _selfStops =
-      StreamController<SelfStop>.broadcast();
+  final StreamController<AutoStop> _autoStops =
+      StreamController<AutoStop>.broadcast();
 
-  /// Walks the recorder stopped by itself (auto-stop). A manual [stop] never
-  /// appears here — its caller already has the result.
-  Stream<SelfStop> get selfStops => _selfStops.stream;
+  /// Walks the recorder auto-stopped. A manual [stop] never appears here —
+  /// its caller already has the result.
+  Stream<AutoStop> get autoStops => _autoStops.stream;
 
   WalkRecorder({
     required this.locationService,
@@ -106,13 +106,15 @@ class WalkRecorder {
   })  : _repository = repository,
         _now = now;
 
-  /// [autoStopAfter] is the moving time after which the walk stops and saves
-  /// itself, announced on [selfStops]; null (Off) records until stopped.
+  /// With an [autoStopLimit], the walk stops and saves itself once its moving
+  /// time reaches the limit, announced on [autoStops]; null (Off) records
+  /// until stopped. The limit is captured here for this walk only, so a
+  /// settings change mid-walk applies from the next walk.
   Future<LocationServiceResult> start({
     ForegroundNotificationText? notification,
     LocationConsent? foregroundConsent,
     LocationConsent? backgroundConsent,
-    Duration? autoStopAfter,
+    AutoStopLimit? autoStopLimit,
   }) async {
     if (_starting || _state != RecorderState.idle) {
       return LocationServiceResult.running;
@@ -130,7 +132,7 @@ class WalkRecorder {
         return LocationServiceResult.permissionDenied;
       }
       _state = RecorderState.recording;
-      _autoStopAfter = autoStopAfter;
+      _autoStopLimit = autoStopLimit;
       _startTime = _now();
       _periodStart = _startTime;
       _id = _generateId(_startTime!);
@@ -205,9 +207,9 @@ class WalkRecorder {
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_state != RecorderState.recording || _stopping) return;
       final now = _now();
-      final limit = _autoStopAfter;
-      if (limit != null && _elapsedAt(now) >= limit) {
-        _selfStop(limit);
+      final limit = _autoStopLimit;
+      if (limit != null && _elapsedAt(now) >= limit.duration) {
+        _autoStop(limit);
         return;
       }
       _snapshots.add(_buildSnapshot(now));
@@ -242,14 +244,14 @@ class WalkRecorder {
   /// running, or when persistence failed (the recorder still ends up stopped).
   Future<Walk?> stop() => _stop();
 
-  /// Auto-stop: finalizes the walk exactly like [stop], ending it at the
-  /// moment moving time reached [limit] — a tick can land a little late, and
-  /// the saved duration must still equal the limit — then announces it.
-  Future<void> _selfStop(Duration limit) async {
+  /// Finalizes the walk exactly like [stop], ending it at the moment moving
+  /// time reached [limit] — a tick can land a little late, and the saved
+  /// duration must still equal the limit — then announces it.
+  Future<void> _autoStop(AutoStopLimit limit) async {
     // The ticker only runs while recording, so the open period holds the
     // moment the limit was crossed.
-    final endTime = _periodStart!.add(limit - _accumulatedDuration);
-    // Nobody awaits a self-stop, so a teardown failure that a manual stop()
+    final endTime = _periodStart!.add(limit.duration - _accumulatedDuration);
+    // Nobody awaits an auto-stop, so a teardown failure that a manual stop()
     // would rethrow to its caller must not escape here: the recorder is
     // stopped either way, and the screen has to hear about it to leave the
     // recording view.
@@ -257,14 +259,14 @@ class WalkRecorder {
     try {
       walk = await _stop(endTime: endTime);
     } catch (e) {
-      debugPrint('WalkRecorder: self-stop teardown failed: $e');
+      debugPrint('WalkRecorder: auto-stop teardown failed: $e');
     }
-    if (!_selfStops.isClosed) {
-      _selfStops.add(SelfStop(walk: walk, limit: limit));
+    if (!_autoStops.isClosed) {
+      _autoStops.add(AutoStop(walk: walk, limit: limit));
     }
   }
 
-  /// Shared by [stop] and [_selfStop]. [endTime] defaults to now.
+  /// Shared by [stop] and [_autoStop]. [endTime] defaults to now.
   Future<Walk?> _stop({DateTime? endTime}) async {
     if (_stopping ||
         (_state != RecorderState.recording && _state != RecorderState.paused)) {
@@ -272,8 +274,8 @@ class WalkRecorder {
     }
     _stopping = true;
     // [_stopping] stays set until the save below completes: a pause/resume in
-    // the teardown gap, or a reset() in the save gap (a manual stop racing a
-    // self-stop), would otherwise pull state out from under the walk.
+    // the teardown gap, or a reset() in the save gap (a manual stop racing an
+    // auto-stop), would otherwise pull state out from under the walk.
     try {
       return await _finalize(endTime ?? _now());
     } finally {
@@ -326,7 +328,7 @@ class WalkRecorder {
     _periodStart = null;
     _lastProgressPersist = null;
     _accumulatedDuration = Duration.zero;
-    _autoStopAfter = null;
+    _autoStopLimit = null;
     _signalLost = false;
     _coordinates.clear();
     _persist = Future<void>.value();
@@ -341,7 +343,7 @@ class WalkRecorder {
     _ticker?.cancel();
     _subscription?.cancel();
     _snapshots.close();
-    _selfStops.close();
+    _autoStops.close();
   }
 
   /// Errors forwarded by [LocationService.positions] (e.g. location services
