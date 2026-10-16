@@ -2,11 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/units.dart';
 
+/// The auto-stop limits the settings offer, besides Off (null). Moving time,
+/// not wall-clock time — see [WalkRecorder.start].
+const autoStopLimits = [
+  Duration(hours: 1),
+  Duration(hours: 2),
+  Duration(hours: 4),
+];
+
 /// Persists user settings. One key per setting; absence means "default".
 class SettingsRepository {
   static const _localeKey = 'locale_override';
   static const _themeKey = 'theme_mode';
   static const _unitsKey = 'units_override';
+  static const _autoStopKey = 'auto_stop_after_minutes';
 
   final SharedPreferences _prefs;
 
@@ -69,6 +78,28 @@ class SettingsRepository {
       await _prefs.remove(_unitsKey);
     } else {
       await _prefs.setString(_unitsKey, units.name);
+    }
+  }
+
+  /// The persisted auto-stop limit, or null for Off. Absent, unknown (not one
+  /// of [autoStopLimits]), or corrupt data all mean Off — this never throws.
+  Duration? readAutoStopAfter() {
+    int? minutes;
+    try {
+      minutes = _prefs.getInt(_autoStopKey);
+    } catch (_) {
+      return null; // corrupt/typed data -> Off
+    }
+    if (minutes == null) return null;
+    final limit = Duration(minutes: minutes);
+    return autoStopLimits.contains(limit) ? limit : null;
+  }
+
+  Future<void> writeAutoStopAfter(Duration? limit) async {
+    if (limit == null) {
+      await _prefs.remove(_autoStopKey);
+    } else {
+      await _prefs.setInt(_autoStopKey, limit.inMinutes);
     }
   }
 }

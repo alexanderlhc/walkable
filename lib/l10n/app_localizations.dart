@@ -487,6 +487,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Version {version} ({build})'**
   String settingsVersion(String version, String build);
+
+  /// No description provided for @settingsAutoStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-stop walk'**
+  String get settingsAutoStop;
+
+  /// No description provided for @autoStopOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get autoStopOff;
+
+  /// No description provided for @autoStopAfterHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{After 1 hour} other{After {hours} hours}}'**
+  String autoStopAfterHours(int hours);
+
+  /// No description provided for @walkAutoStoppedNote.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{Walk stopped automatically after 1 hour} other{Walk stopped automatically after {hours} hours}}'**
+  String walkAutoStoppedNote(int hours);
 }
 
 class _AppLocalizationsDelegate

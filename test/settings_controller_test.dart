@@ -44,6 +44,7 @@ void main() {
       when(() => repository.readThemeMode()).thenReturn(ThemeMode.system);
       when(() => repository.readLocaleCode()).thenThrow(TypeError());
       when(() => repository.readUnitsOverride()).thenReturn(null);
+      when(() => repository.readAutoStopAfter()).thenReturn(null);
       final controller = SettingsController(repository);
 
       controller.load();
@@ -210,6 +211,69 @@ void main() {
       await controller.setUnitsOverride(UnitSystem.metric);
 
       expect(controller.unitsOverride, UnitSystem.metric);
+    });
+  });
+
+  group('autoStopAfter', () {
+    test('defaults to null (Off) when nothing is stored', () async {
+      final controller = await buildController({});
+      controller.load();
+      expect(controller.autoStopAfter, isNull);
+    });
+
+    test('restores a persisted 2 h limit', () async {
+      final controller =
+          await buildController({'auto_stop_after_minutes': 120});
+      controller.load();
+      expect(controller.autoStopAfter, const Duration(hours: 2));
+    });
+
+    test('unknown stored value -> Off', () async {
+      final controller = await buildController({'auto_stop_after_minutes': 90});
+      controller.load();
+      expect(controller.autoStopAfter, isNull);
+    });
+
+    test('type-corrupt stored value -> Off', () async {
+      final controller =
+          await buildController({'auto_stop_after_minutes': 'two hours'});
+      controller.load();
+      expect(controller.autoStopAfter, isNull);
+    });
+
+    test('setAutoStopAfter updates, notifies, and persists', () async {
+      final controller = await buildController({});
+      var notified = 0;
+      controller.addListener(() => notified++);
+
+      await controller.setAutoStopAfter(const Duration(hours: 4));
+
+      expect(controller.autoStopAfter, const Duration(hours: 4));
+      expect(notified, 1);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getInt('auto_stop_after_minutes'), 240);
+    });
+
+    test('null (Off) removes the stored key', () async {
+      final controller = await buildController({'auto_stop_after_minutes': 60});
+      controller.load();
+
+      await controller.setAutoStopAfter(null);
+
+      expect(controller.autoStopAfter, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('auto_stop_after_minutes'), isFalse);
+    });
+
+    test('persistence failure keeps the in-memory value', () async {
+      final repository = MockSettingsRepository();
+      when(() => repository.writeAutoStopAfter(any()))
+          .thenThrow(Exception('disk full'));
+      final controller = SettingsController(repository);
+
+      await controller.setAutoStopAfter(const Duration(hours: 1));
+
+      expect(controller.autoStopAfter, const Duration(hours: 1));
     });
   });
 }

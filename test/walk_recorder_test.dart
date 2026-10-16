@@ -21,6 +21,7 @@ class _StubLocationService extends LocationService {
   Completer<void>? startGate;
 
   int startCalls = 0;
+  int stopCalls = 0;
 
   @override
   Future<LocationServiceResult> start({
@@ -35,7 +36,7 @@ class _StubLocationService extends LocationService {
   }
 
   @override
-  Future<void> stop() async {}
+  Future<void> stop() async => stopCalls++;
 
   @override
   Stream<Position> get positions => _ctrl.stream;
@@ -80,6 +81,10 @@ class _FlakyWalkRepository implements WalkRepository {
   /// Every duration passed to [updateProgress], including rejected calls.
   final List<Duration> updateProgressCalls = [];
 
+  /// Without an inner repository, the walk the last successful [finishWalk]
+  /// described — so [findById] can hand back a saved walk under fakeAsync.
+  Walk? _finished;
+
   @override
   Future<void> createWalk(String id, DateTime startTime) async {
     if (failCreateWalk) throw StateError('createWalk rejected');
@@ -97,6 +102,16 @@ class _FlakyWalkRepository implements WalkRepository {
   Future<void> finishWalk(String walkId, DateTime endTime, Duration duration,
       double distanceMetres, List<Coord> route) async {
     if (failFinishWalk) throw StateError('finishWalk rejected');
+    if (_inner == null) {
+      _finished = Walk(
+        id: walkId,
+        startTime: endTime.subtract(duration),
+        endTime: endTime,
+        duration: duration,
+        distanceMetres: distanceMetres,
+        route: route,
+      );
+    }
     await _inner?.finishWalk(walkId, endTime, duration, distanceMetres, route);
   }
 
@@ -114,13 +129,76 @@ class _FlakyWalkRepository implements WalkRepository {
   Future<void> save(Walk walk) async => _inner?.save(walk);
 
   @override
-  Future<Walk?> findById(String id) async => _inner?.findById(id);
+  Future<Walk?> findById(String id) async {
+    final inner = _inner;
+    if (inner != null) return inner.findById(id);
+    return _finished?.id == id ? _finished : null;
+  }
 
   @override
   Future<List<Walk>> findAll() async => await _inner?.findAll() ?? const [];
 
   @override
   Future<void> close() async => _inner?.close();
+}
+
+/// A [_StubLocationService] whose position subscriptions cancel with a future
+/// from the current zone. A broadcast subscription's cancel() returns a
+/// root-zone future that fakeAsync can never flush, which would hang every
+/// awaited cancel in pause() and stop().
+class _FakeAsyncLocationService extends _StubLocationService {
+  @override
+  Stream<Position> get positions {
+    late StreamSubscription<Position> inner;
+    late final StreamController<Position> ctrl;
+    ctrl = StreamController<Position>(
+      onListen: () =>
+          inner = super.positions.listen(ctrl.add, onError: ctrl.addError),
+      onCancel: () async {
+        unawaited(inner.cancel());
+      },
+    );
+    return ctrl.stream;
+  }
+}
+
+/// One fakeAsync auto-stop scenario: a recorder on the fake clock with the
+/// no-op flaky repository, plus every self-stop event it emits.
+class _AutoStopHarness {
+  final FakeAsync async;
+  final location = _FakeAsyncLocationService();
+  final clock = _FakeClock();
+  final flaky = _FlakyWalkRepository();
+  late final WalkRecorder recorder = WalkRecorder(
+    locationService: location,
+    repository: flaky,
+    now: clock.now,
+  );
+  final List<SelfStop> selfStops = [];
+  late final StreamSubscription<SelfStop> _sub;
+
+  _AutoStopHarness(this.async) {
+    _sub = recorder.selfStops.listen(selfStops.add);
+  }
+
+  void flush() => async.flushMicrotasks();
+
+  /// Advances clock and ticker in lockstep, one tick at a time, like the
+  /// real 1-second ticker experiences time.
+  void record(Duration d) {
+    for (var i = 0; i < d.inSeconds; i++) {
+      clock.advance(const Duration(seconds: 1));
+      async.elapse(const Duration(seconds: 1));
+    }
+    flush();
+  }
+
+  void dispose() {
+    _sub.cancel();
+    recorder.dispose();
+    location.dispose();
+    flush();
+  }
 }
 
 Position _pos(double lat, double lng) => Position(
@@ -671,5 +749,191 @@ void main() {
     // The full recording is untouched — only the preview is simplified.
     final full = await repository.findById(walks.single.id);
     expect(full!.coordinates.length, 3);
+  });
+
+  // Auto-stop counts pause-aware moving time on the recorder's own 1-second
+  // ticker, so these drive the fake clock and the ticker in lockstep under
+  // fakeAsync, like the progress-persistence test above.
+  group('auto-stop', () {
+    const limit = Duration(hours: 1);
+
+    /// Runs [body] inside fakeAsync with a fresh recorder whose repository is
+    /// the no-op flaky double (real sqflite never completes under fakeAsync).
+    void autoStopTest(void Function(_AutoStopHarness h) body) {
+      fakeAsync((async) {
+        final h = _AutoStopHarness(async);
+        body(h);
+        h.dispose();
+      });
+    }
+
+    test('with Off, the recorder never stops a walk on its own', () {
+      autoStopTest((h) {
+        h.recorder.start();
+        h.flush();
+
+        h.record(const Duration(hours: 10));
+
+        expect(h.recorder.state, RecorderState.recording);
+        expect(h.selfStops, isEmpty);
+      });
+    });
+
+    test('keeps recording until moving time reaches the limit', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+
+        h.record(limit - const Duration(seconds: 1));
+
+        expect(h.recorder.state, RecorderState.recording);
+        expect(h.selfStops, isEmpty);
+      });
+    });
+
+    test(
+        'stops and saves the walk at the limit; the self-stop event carries '
+        'the saved walk', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+        h.location.emit(_pos(55.676, 12.568));
+        h.location.emit(_pos(55.677, 12.569));
+        h.flush();
+
+        h.record(limit);
+
+        expect(h.recorder.state, RecorderState.stopped);
+        // Location and the foreground service shut down, as on a manual stop.
+        expect(h.location.stopCalls, 1);
+        expect(h.selfStops, hasLength(1));
+        final walk = h.selfStops.single.walk;
+        expect(walk, isNotNull);
+        expect(walk!.duration, limit);
+        expect(walk.distanceMetres, greaterThan(0));
+        expect(h.selfStops.single.limit, limit);
+      });
+    });
+
+    test('the saved duration equals the limit even when a tick runs late', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+
+        h.record(limit - const Duration(seconds: 1));
+        // The next tick lands 20 s late (e.g. a throttled background
+        // process): moving time is already past the limit when it fires.
+        h.clock.advance(const Duration(seconds: 21));
+        h.async.elapse(const Duration(seconds: 1));
+        h.flush();
+
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.selfStops.single.walk!.duration, limit);
+      });
+    });
+
+    test('paused time does not count; resuming continues the countdown', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+
+        h.record(const Duration(minutes: 40));
+        h.recorder.pause();
+        h.flush();
+        // A long café stop: far past the limit in wall-clock time.
+        h.record(const Duration(hours: 3));
+        expect(h.recorder.state, RecorderState.paused);
+        expect(h.selfStops, isEmpty);
+
+        h.recorder.resume();
+        h.flush();
+        h.record(const Duration(minutes: 20) - const Duration(seconds: 1));
+        expect(h.recorder.state, RecorderState.recording);
+
+        h.record(const Duration(seconds: 1));
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.selfStops.single.walk!.duration, limit);
+      });
+    });
+
+    test('a signal-lost spell does not affect the countdown', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+
+        h.record(const Duration(minutes: 10));
+        h.location.emitError(StateError('location off'));
+        h.flush();
+        h.record(const Duration(minutes: 30));
+        h.location.emit(_pos(55.676, 12.568));
+        h.flush();
+        h.record(const Duration(minutes: 20) - const Duration(seconds: 1));
+        expect(h.recorder.state, RecorderState.recording);
+
+        h.record(const Duration(seconds: 1));
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.selfStops.single.walk!.duration, limit);
+      });
+    });
+
+    test('the limit is captured per walk, not carried into the next one', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+        h.record(limit);
+        expect(h.recorder.state, RecorderState.stopped);
+        h.recorder.reset();
+
+        // The next walk starts with auto-stop Off.
+        h.recorder.start();
+        h.flush();
+        h.record(const Duration(hours: 5));
+        expect(h.recorder.state, RecorderState.recording);
+        expect(h.selfStops, hasLength(1));
+      });
+    });
+
+    test('a manual stop before the limit emits no self-stop event', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+        h.record(const Duration(minutes: 30));
+
+        h.recorder.stop();
+        h.flush();
+        h.record(const Duration(hours: 2));
+
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.selfStops, isEmpty);
+      });
+    });
+
+    test(
+        'a persistence failure during the self-stop still leaves the '
+        'recorder stopped and reusable', () {
+      autoStopTest((h) {
+        h.flaky.failFinishWalk = true;
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+
+        h.record(limit);
+
+        expect(h.recorder.state, RecorderState.stopped);
+        // Same as a failed manual stop: there is no saved walk to carry.
+        expect(h.selfStops, hasLength(1));
+        expect(h.selfStops.single.walk, isNull);
+
+        h.recorder.reset();
+        expect(h.recorder.state, RecorderState.idle);
+
+        h.flaky.failFinishWalk = false;
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+        expect(h.recorder.state, RecorderState.recording);
+        h.record(limit);
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.selfStops.last.walk!.duration, limit);
+      });
+    });
   });
 }

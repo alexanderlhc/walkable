@@ -55,6 +55,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   WalkSnapshot? _snapshot;
   late RecorderState _recorderState;
   late StreamSubscription<WalkSnapshot> _sub;
+  late StreamSubscription<SelfStop> _selfStopSub;
   final MapController _mapController = MapController();
   bool _locationPermissionGranted = false;
   bool _recentring = false;
@@ -71,6 +72,10 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   // start/finish markers, and the panel shows its final stats. Cleared when
   // the user taps Done.
   Walk? _completedWalk;
+
+  // Set alongside [_completedWalk] when the recorder stopped the walk itself:
+  // the auto-stop limit the summary's "stopped automatically" note names.
+  Duration? _autoStoppedAfter;
 
   // Camera follow: while engaged, every position fix recentres the camera on
   // the user (centre only — zoom stays whatever the user set). Any explicit
@@ -127,6 +132,13 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         if (last != null) _currentPosition = LatLng(last.lat, last.lng);
       });
       if (last != null) _followPosition(LatLng(last.lat, last.lng));
+    });
+    // Auto-stop ends the walk without this screen asking, so pick up the
+    // saved walk here and land on the same summary a manual stop shows.
+    _selfStopSub = widget.recorder.selfStops.listen((selfStop) {
+      widget.recorder.reset();
+      if (!mounted) return;
+      _showStopped(selfStop.walk, autoStoppedAfter: selfStop.limit);
     });
     // Deferred to after the first frame: the foreground-location disclosure
     // dialog needs localizations and a Navigator, neither of which are
@@ -191,6 +203,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   @override
   void dispose() {
     _sub.cancel();
+    _selfStopSub.cancel();
     _positionSub?.cancel();
     _mapController.dispose();
     super.dispose();
@@ -299,6 +312,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       ),
       foregroundConsent: _showForegroundLocationDisclosure,
       backgroundConsent: _showBackgroundLocationDisclosure,
+      // Captured by the recorder for this walk only: a settings change
+      // mid-walk applies from the next one.
+      autoStopAfter: widget.settingsController.autoStopAfter,
     );
     if (!mounted) return;
     if (result == LocationServiceResult.permissionDenied) {
@@ -373,7 +389,11 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
         ],
       ),
     );
-    if (stop == true && mounted) await _onStop();
+    // An auto-stop may have ended the walk while the dialog was up; stopping
+    // again would replace its summary with nothing.
+    if (stop == true && mounted && _recorderState != RecorderState.idle) {
+      await _onStop();
+    }
   }
 
   Future<void> _onPause() async {
@@ -395,11 +415,19 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     final walk = await widget.recorder.stop();
     widget.recorder.reset();
     if (!mounted) return;
+    _showStopped(walk);
+  }
+
+  /// Post-stop landing shared by a manual stop and an auto-stop (which passes
+  /// its [autoStoppedAfter] limit for the summary's note). The recorder has
+  /// already been reset.
+  void _showStopped(Walk? walk, {Duration? autoStoppedAfter}) {
     setState(() {
       _recorderState = RecorderState.idle;
       // Null (nothing recorded, or the save failed) skips the summary and
       // falls straight back to idle — there is no saved walk to present.
       _completedWalk = walk;
+      _autoStoppedAfter = walk == null ? null : autoStoppedAfter;
     });
     if (walk != null) {
       // Fit the camera to the finished route once the summary panel has laid
@@ -445,6 +473,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   void _dismissCompleted() {
     setState(() {
       _completedWalk = null;
+      _autoStoppedAfter = null;
       // Back to idle, follow resumes — even after a gesture during the
       // summary; Done means "I'm finished looking at the route".
       _followEnabled = true;
@@ -577,6 +606,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
               snapshot: _snapshot,
               units: units,
               completedWalk: _completedWalk,
+              autoStoppedAfter: _autoStoppedAfter,
               onDismissCompleted: _dismissCompleted,
               onViewRoute: _viewCompletedRoute,
               onShare: _shareCompletedWalk,
@@ -728,6 +758,9 @@ class _BottomPanel extends StatefulWidget {
   // When non-null (and the recorder is idle), the panel shows the "walk
   // complete" summary for this walk instead of the Start button.
   final Walk? completedWalk;
+  // Non-null when [completedWalk] was auto-stopped: the summary adds a note
+  // naming this limit.
+  final Duration? autoStoppedAfter;
   final VoidCallback onDismissCompleted;
   final VoidCallback onViewRoute;
   final VoidCallback onShare;
@@ -745,6 +778,7 @@ class _BottomPanel extends StatefulWidget {
     required this.snapshot,
     required this.units,
     required this.completedWalk,
+    required this.autoStoppedAfter,
     required this.onDismissCompleted,
     required this.onViewRoute,
     required this.onShare,
@@ -883,6 +917,15 @@ class _BottomPanelState extends State<_BottomPanel> {
           l10n.walkCompleteSubtitle,
           style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
         ),
+        if (widget.autoStoppedAfter case final limit?) ...[
+          const SizedBox(height: 4),
+          Text(
+            l10n.walkAutoStoppedNote(limit.inHours),
+            key: const Key('auto_stopped_note'),
+            textAlign: TextAlign.center,
+            style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
+          ),
+        ],
         const SizedBox(height: 20),
         IntrinsicHeight(
           child: Row(

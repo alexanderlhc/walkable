@@ -10,6 +10,7 @@ class SettingsController extends ChangeNotifier {
   Locale? _localeOverride;
   ThemeMode _themeMode = ThemeMode.system;
   UnitSystem? _unitsOverride;
+  Duration? _autoStopAfter;
 
   SettingsController(this.repository);
 
@@ -19,6 +20,10 @@ class SettingsController extends ChangeNotifier {
 
   UnitSystem? get unitsOverride => _unitsOverride;
 
+  /// The moving time after which a walk stops itself, or null for Off. Read
+  /// when a walk starts; see [WalkRecorder.start].
+  Duration? get autoStopAfter => _autoStopAfter;
+
   /// Restores the persisted override. A code we no longer support (or
   /// corrupt data) degrades to following the system rather than crashing.
   ///
@@ -27,6 +32,7 @@ class SettingsController extends ChangeNotifier {
   void load() {
     _themeMode = repository.readThemeMode();
     _unitsOverride = repository.readUnitsOverride();
+    _autoStopAfter = repository.readAutoStopAfter();
     String? code;
     try {
       code = repository.readLocaleCode();
@@ -66,6 +72,17 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
     try {
       await repository.writeUnitsOverride(units);
+    } catch (_) {
+      // The choice still applies this session; it just won't survive a
+      // restart.
+    }
+  }
+
+  Future<void> setAutoStopAfter(Duration? limit) async {
+    _autoStopAfter = limit;
+    notifyListeners();
+    try {
+      await repository.writeAutoStopAfter(limit);
     } catch (_) {
       // The choice still applies this session; it just won't survive a
       // restart.

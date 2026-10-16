@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:walkable/l10n/app_localizations.dart';
+import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/units.dart';
 
@@ -92,6 +93,26 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
+            _SectionHeader(l10n.settingsAutoStop),
+            RadioGroup<Duration?>(
+              groupValue: controller.autoStopAfter,
+              onChanged: controller.setAutoStopAfter,
+              child: Column(
+                children: [
+                  RadioListTile<Duration?>(
+                    key: const Key('auto_stop_off'),
+                    value: null,
+                    title: Text(l10n.autoStopOff),
+                  ),
+                  for (final limit in autoStopLimits)
+                    RadioListTile<Duration?>(
+                      key: Key('auto_stop_${limit.inHours}h'),
+                      value: limit,
+                      title: Text(l10n.autoStopAfterHours(limit.inHours)),
+                    ),
+                ],
+              ),
+            ),
             const _VersionFooter(),
           ],
         ),
@@ -129,7 +150,7 @@ class _VersionFooter extends StatelessWidget {
 }
 
 /// M3 settings-section header: primary-colored titleSmall with list-inset
-/// padding. Shared by the language and theme sections.
+/// padding. Shared by every settings section.
 class _SectionHeader extends StatelessWidget {
   final String title;
 

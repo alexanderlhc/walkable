@@ -64,5 +64,9 @@
   "notificationText": "Walkable registrerer din gåtur",
   "unitKm": "{value} km",
   "unitMi": "{value} mi",
-  "settingsVersion": "Version {version} ({build})"
+  "settingsVersion": "Version {version} ({build})",
+  "settingsAutoStop": "Stop gåtur automatisk",
+  "autoStopOff": "Fra",
+  "autoStopAfterHours": "{hours, plural, =1{Efter 1 time} other{Efter {hours} timer}}",
+  "walkAutoStoppedNote": "{hours, plural, =1{Gåturen blev stoppet automatisk efter 1 time} other{Gåturen blev stoppet automatisk efter {hours} timer}}"
 }

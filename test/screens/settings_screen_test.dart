@@ -235,6 +235,91 @@ void main() {
     expect(find.text('Miles'), findsOneWidget);
   });
 
+  testWidgets('shows auto-stop section with Off and the three limits',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Auto-stop walk'), findsOneWidget);
+    expect(find.text('Off'), findsOneWidget);
+    expect(find.text('After 1 hour'), findsOneWidget);
+    expect(find.text('After 2 hours'), findsOneWidget);
+    expect(find.text('After 4 hours'), findsOneWidget);
+  });
+
+  testWidgets('Off is selected when nothing is stored', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    // The section sits below the fold; ListView builds it lazily.
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    final group = tester
+        .widget<RadioGroup<Duration?>>(find.byType(RadioGroup<Duration?>));
+    expect(group.groupValue, isNull);
+  });
+
+  testWidgets('persisted auto-stop limit is the selected radio',
+      (tester) async {
+    await setUpController({'auto_stop_after_minutes': 120});
+    await tester.pumpWidget(buildSubject());
+    // The section sits below the fold; ListView builds it lazily.
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    final group = tester
+        .widget<RadioGroup<Duration?>>(find.byType(RadioGroup<Duration?>));
+    expect(group.groupValue, const Duration(hours: 2));
+  });
+
+  testWidgets('tapping After 2 hours updates the controller and persists',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_2h')), 500);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('auto_stop_2h')));
+    await tester.pumpAndSettle();
+
+    expect(controller.autoStopAfter, const Duration(hours: 2));
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getInt('auto_stop_after_minutes'), 120);
+  });
+
+  testWidgets('tapping Off removes the stored auto-stop limit', (tester) async {
+    await setUpController({'auto_stop_after_minutes': 60});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('auto_stop_off')), 500);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('auto_stop_off')));
+    await tester.pumpAndSettle();
+
+    expect(controller.autoStopAfter, isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('auto_stop_after_minutes'), isFalse);
+  });
+
+  testWidgets('renders Danish auto-stop strings under the Danish locale',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Stop gåtur automatisk'), findsOneWidget);
+    expect(find.text('Fra'), findsOneWidget);
+    expect(find.text('Efter 1 time'), findsOneWidget);
+    expect(find.text('Efter 2 timer'), findsOneWidget);
+    expect(find.text('Efter 4 timer'), findsOneWidget);
+  });
+
   testWidgets('shows the app version and build number at the bottom',
       (tester) async {
     await setUpController({});

@@ -32,6 +32,7 @@ void main() {
 
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => ctrl.stream);
+    when(() => recorder.selfStops).thenAnswer((_) => const Stream.empty());
     when(() => recorder.locationService).thenReturn(locationService);
     when(() => locationService.checkAndRequestPermission(
             foregroundConsent: any(named: 'foregroundConsent')))
