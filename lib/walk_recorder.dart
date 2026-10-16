@@ -62,8 +62,9 @@ class WalkRecorder {
   // subscriptions/tickers).
   bool _starting = false;
 
-  // Set once a stop (manual or self) has begun, so a manual stop() landing in
-  // a self-stop's async gap (or vice versa) can't finalize the walk twice.
+  // Set from the moment a stop (manual or self) begins until its save is done,
+  // so nothing landing in its async gaps — another stop, pause/resume, or
+  // reset() — can finalize the walk twice or clear it mid-save.
   bool _stopping = false;
 
   String? _id;
@@ -152,7 +153,7 @@ class WalkRecorder {
   }
 
   Future<void> pause() async {
-    if (_state != RecorderState.recording) return;
+    if (_stopping || _state != RecorderState.recording) return;
     final now = _now();
     _accumulatedDuration += now.difference(_periodStart!);
     _periodStart = null;
@@ -175,7 +176,7 @@ class WalkRecorder {
   /// case the permission was revoked while paused — without it resume() stays
   /// paused rather than prompting with no preceding disclosure.
   Future<void> resume({LocationConsent? foregroundConsent}) async {
-    if (_starting || _state != RecorderState.paused) return;
+    if (_starting || _stopping || _state != RecorderState.paused) return;
     _starting = true;
     try {
       final result = await locationService.start(
@@ -248,7 +249,16 @@ class WalkRecorder {
     // The ticker only runs while recording, so the open period holds the
     // moment the limit was crossed.
     final endTime = _periodStart!.add(limit - _accumulatedDuration);
-    final walk = await _stop(endTime: endTime);
+    // Nobody awaits a self-stop, so a teardown failure that a manual stop()
+    // would rethrow to its caller must not escape here: the recorder is
+    // stopped either way, and the screen has to hear about it to leave the
+    // recording view.
+    Walk? walk;
+    try {
+      walk = await _stop(endTime: endTime);
+    } catch (e) {
+      debugPrint('WalkRecorder: self-stop teardown failed: $e');
+    }
     if (!_selfStops.isClosed) {
       _selfStops.add(SelfStop(walk: walk, limit: limit));
     }
@@ -261,11 +271,21 @@ class WalkRecorder {
       return null;
     }
     _stopping = true;
+    // [_stopping] stays set until the save below completes: a pause/resume in
+    // the teardown gap, or a reset() in the save gap (a manual stop racing a
+    // self-stop), would otherwise pull state out from under the walk.
+    try {
+      return await _finalize(endTime ?? _now());
+    } finally {
+      _stopping = false;
+    }
+  }
+
+  Future<Walk?> _finalize(DateTime end) async {
     _ticker?.cancel();
     _ticker = null;
-    // Freeze moving time at [endTime] before the async teardown below: the
-    // walk ended then, however long the teardown takes.
-    final end = endTime ?? _now();
+    // Freeze moving time at [end] before the async teardown below: the walk
+    // ended then, however long the teardown takes.
     if (_periodStart != null) {
       _accumulatedDuration += end.difference(_periodStart!);
       _periodStart = null;
@@ -276,7 +296,6 @@ class WalkRecorder {
       await locationService.stop();
     } finally {
       _state = RecorderState.stopped;
-      _stopping = false;
     }
 
     _snapshots.add(_buildSnapshot(end));
@@ -300,7 +319,7 @@ class WalkRecorder {
   }
 
   void reset() {
-    if (_state != RecorderState.stopped) return;
+    if (_stopping || _state != RecorderState.stopped) return;
     _state = RecorderState.idle;
     _id = null;
     _startTime = null;

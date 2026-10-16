@@ -20,6 +20,13 @@ class _StubLocationService extends LocationService {
   /// the recorder inside start()'s async gap.
   Completer<void>? startGate;
 
+  /// When set, [stop] suspends until the completer fires — lets tests hold
+  /// the recorder inside a stop's teardown.
+  Completer<void>? stopGate;
+
+  /// When true, [stop] throws (e.g. the platform channel failed).
+  bool failStop = false;
+
   int startCalls = 0;
   int stopCalls = 0;
 
@@ -36,7 +43,12 @@ class _StubLocationService extends LocationService {
   }
 
   @override
-  Future<void> stop() async => stopCalls++;
+  Future<void> stop() async {
+    stopCalls++;
+    final gate = stopGate;
+    if (gate != null) await gate.future;
+    if (failStop) throw StateError('location stop rejected');
+  }
 
   @override
   Stream<Position> get positions => _ctrl.stream;
@@ -78,6 +90,10 @@ class _FlakyWalkRepository implements WalkRepository {
   bool failFinishWalk = false;
   bool failUpdateProgress = false;
 
+  /// When set, [finishWalk] suspends until the completer fires — lets tests
+  /// hold the recorder inside a stop's save.
+  Completer<void>? finishGate;
+
   /// Every duration passed to [updateProgress], including rejected calls.
   final List<Duration> updateProgressCalls = [];
 
@@ -101,6 +117,8 @@ class _FlakyWalkRepository implements WalkRepository {
   @override
   Future<void> finishWalk(String walkId, DateTime endTime, Duration duration,
       double distanceMetres, List<Coord> route) async {
+    final gate = finishGate;
+    if (gate != null) await gate.future;
     if (failFinishWalk) throw StateError('finishWalk rejected');
     if (_inner == null) {
       _finished = Walk(
@@ -905,6 +923,91 @@ void main() {
 
         expect(h.recorder.state, RecorderState.stopped);
         expect(h.selfStops, isEmpty);
+      });
+    });
+
+    test(
+        'a manual stop and reset during the self-stop\'s save do not lose '
+        'the walk', () {
+      autoStopTest((h) {
+        h.flaky.finishGate = Completer<void>();
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+        h.record(limit);
+        // Teardown is done, the save is still in flight.
+        expect(h.recorder.state, RecorderState.stopped);
+
+        // The walk screen's Back dialog: the user confirms Stop now.
+        Walk? manual;
+        h.recorder.stop().then((w) => manual = w);
+        h.flush();
+        h.recorder.reset();
+
+        h.flaky.finishGate!.complete();
+        h.flush();
+
+        expect(manual, isNull);
+        expect(h.selfStops.single.walk!.duration, limit);
+        h.recorder.reset();
+        expect(h.recorder.state, RecorderState.idle);
+      });
+    });
+
+    test('a pause during the self-stop\'s teardown is ignored', () {
+      autoStopTest((h) {
+        h.location.stopGate = Completer<void>();
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+        h.record(limit);
+
+        Object? error;
+        h.recorder.pause().catchError((Object e) => error = e);
+        h.flush();
+        h.location.stopGate!.complete();
+        h.flush();
+
+        expect(error, isNull);
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.selfStops.single.walk!.duration, limit);
+      });
+    });
+
+    test(
+        'a failed location shutdown during the self-stop still announces it '
+        'and leaves the recorder stopped', () {
+      autoStopTest((h) {
+        h.location.failStop = true;
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+
+        h.record(limit);
+
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.selfStops, hasLength(1));
+        h.recorder.reset();
+        expect(h.recorder.state, RecorderState.idle);
+      });
+    });
+
+    test('a resume during a manual stop of a paused walk is ignored', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopAfter: limit);
+        h.flush();
+        h.record(const Duration(minutes: 10));
+        h.recorder.pause();
+        h.flush();
+
+        h.location.stopGate = Completer<void>();
+        h.recorder.stop();
+        h.flush();
+        h.recorder.resume();
+        h.flush();
+        h.location.stopGate!.complete();
+        h.flush();
+
+        expect(h.recorder.state, RecorderState.stopped);
+        // Only the walk's own start: resume() must not restart location.
+        expect(h.location.startCalls, 1);
       });
     });
 
