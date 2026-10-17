@@ -7,6 +7,7 @@ dart_defines.local.json
 # Miscellaneous
 *.class
 *.lock
+!/android/Gemfile.lock
 *.log
 *.pyc
 *.swp
@@ -131,3 +132,7 @@ app.*.symbols
 *.iml
 .metadata
 README.md
+
+# Local fastlane install (bundle config path vendor/bundle)
+/android/vendor/
+/android/.bundle/

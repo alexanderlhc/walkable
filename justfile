@@ -89,3 +89,9 @@ walkthrough out="":
 # Remove build artifacts.
 clean:
     {{flutter}} clean
+
+# One-time setup for tag-triggered Play Store releases: a wizard that uploads
+# the signing keystore + key.properties and walks you through creating the
+# Play service-account key, storing all three as GitHub Actions secrets.
+release-secrets:
+    tool/release_secrets.sh

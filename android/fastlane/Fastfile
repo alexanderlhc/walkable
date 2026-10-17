@@ -2,13 +2,47 @@ default_platform(:android)
 
 platform :android do
   desc "Build Flutter AAB and upload to Play Store (default: internal track)"
+  desc "Version name comes from the git tag (v0.3.0 -> 0.3.0); version code is"
+  desc "the highest code on Play (or in pubspec.yaml) + 1, so nothing is ever"
+  desc "committed for a release."
   lane :deploy do |options|
     track = options[:track] || "internal"
+
+    # The run must be for a tag (in CI: a push, or a manual run on a tag), so
+    # the name always matches the code being built.
+    tag = if ENV["GITHUB_ACTIONS"]
+      UI.user_error!("Release runs must be on a tag (got #{ENV['GITHUB_REF']}); pick the tag under \"Use workflow from\"") unless ENV["GITHUB_REF_TYPE"] == "tag"
+      ENV["GITHUB_REF_NAME"]
+    else
+      # Locally, HEAD itself must carry the tag (not just follow one).
+      sh("git tag --points-at HEAD --list 'v*'", log: false).split.last
+    end
+    build_name = tag.to_s.sub(/^v/, "")
+    UI.user_error!("No version tag to derive the version name from (got #{tag.inspect}); tag the release like v0.3.0") unless build_name.match?(/^\d+\.\d+\.\d+$/)
+
+    # Play rejects a reused code, so take the highest one on any track. A track
+    # that has never had a release errors, so a single failure is fine; all of
+    # them failing means the credentials don't work.
+    tracks = %w[internal alpha beta production]
+    codes = []
+    failures = tracks.count do |t|
+      codes.concat(google_play_track_version_codes(track: t))
+      false
+    rescue StandardError => e
+      UI.important("No version codes from #{t}: #{e.message}")
+      true
+    end
+    UI.user_error!("Couldn't read any track from Play; check PLAY_STORE_JSON_KEY") if failures == tracks.size
+
+    # pubspec.yaml's +N is the floor, for codes Play no longer lists.
+    pubspec_code = File.read("../../pubspec.yaml")[/^version:\s*\S+\+(\d+)/, 1].to_i
+    build_number = [codes.max.to_i, pubspec_code].max + 1
+    UI.message("Releasing #{build_name} (#{build_number}) to #{track}")
 
     Dir.chdir("../..") do
       # CARTO_API_KEY for the map tiles; `just carto-key` writes this file.
       UI.user_error!("dart_defines.local.json missing: run `just carto-key` (the map would be blank)") unless File.exist?("dart_defines.local.json")
-      sh("flutter build appbundle --release --dart-define-from-file=dart_defines.local.json")
+      sh("flutter build appbundle --release --dart-define-from-file=dart_defines.local.json --build-name=#{build_name} --build-number=#{build_number}")
     end
 
     upload_to_play_store(
