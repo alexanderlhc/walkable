@@ -44,7 +44,7 @@ adb_ shell dumpsys deviceidle whitelist "+$PKG" >/dev/null
 adb_ shell cmd location set-location-enabled true 2>/dev/null || true
 
 # Keep a fix coming so the first one isn't missed whenever the test subscribes.
-(while true; do adb_ emu geo fix "$FIX_LNG" "$FIX_LAT" >/dev/null 2>&1; sleep 1; done) &
+(while true; do adb_ emu geo fix "$FIX_LNG" "$FIX_LAT" >/dev/null 2>&1 || true; sleep 1; done) &
 feeder=$!
 trap 'kill $feeder 2>/dev/null' EXIT
 

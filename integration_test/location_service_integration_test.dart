@@ -53,13 +53,24 @@ void main() {
     expect(service.notificationsGranted, isTrue);
     expect(service.batteryOptimizationGranted, isTrue);
 
-    final position =
-        await service.positions.first.timeout(const Duration(seconds: 30));
-    final metresOff = const Distance().as(
-        LengthUnit.Meter, _fix, LatLng(position.latitude, position.longitude));
-    expect(metresOff, lessThan(50),
-        reason: 'expected the emulator fix at $_fix, got '
-            '${position.latitude},${position.longitude}');
+    // A fresh emulator can first replay a stale last-known location (Mountain
+    // View on stock images), so wait for the fed fix rather than taking the
+    // first position. Every position seen is reported if it never comes.
+    final seen = <Position>[];
+    final position = await service.positions
+        .where((p) {
+          seen.add(p);
+          return const Distance()
+                  .as(LengthUnit.Meter, _fix, LatLng(p.latitude, p.longitude)) <
+              50;
+        })
+        .first
+        .timeout(const Duration(seconds: 30), onTimeout: () {
+          fail('no position near the emulator fix at $_fix within 30 s; got '
+              '${seen.map((p) => '${p.latitude},${p.longitude}').toList()}');
+        });
+    expect(position.latitude, closeTo(_fix.latitude, 0.001));
+    expect(position.longitude, closeTo(_fix.longitude, 0.001));
 
     await service.stop();
     expect(service.isRunning, isFalse);

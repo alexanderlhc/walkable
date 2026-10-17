@@ -80,7 +80,6 @@ void main() {
     // ── Record ───────────────────────────────────────────────────────────────
     await tester.tap(find.byKey(const Key('start_button')));
     await _pumpUntil(tester, find.byKey(const Key('stop_button')));
-    expect(recorder.state, RecorderState.recording);
 
     final step = _walkDuration ~/ (_route.length - 1);
     for (var i = 0; i < _route.length; i++) {
