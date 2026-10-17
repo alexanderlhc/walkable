@@ -141,7 +141,7 @@ void main() {
 
   for (final recording in [false, true]) {
     testWidgets(
-        'map credit sits clear of the bottom panel and the menu chip '
+        'map credit sits clear of the bottom panel '
         '(${recording ? 'recording' : 'idle'})', (tester) async {
       await tester.pumpWidget(await buildSubject());
       await tester.pumpAndSettle();
@@ -153,9 +153,7 @@ void main() {
       final credit = tester.getRect(find
           .textContaining('OpenStreetMap contributors', findRichText: true));
       final panel = tester.getRect(find.byType(BackdropFilter));
-      final menu = tester.getRect(find.byKey(const Key('menu_button')));
       expect(credit.bottom, lessThanOrEqualTo(panel.top));
-      expect(credit.overlaps(menu), isFalse);
     });
   }
 

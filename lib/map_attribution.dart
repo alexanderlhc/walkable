@@ -15,10 +15,6 @@ final Uri cartoAttributionUrl = Uri.parse('https://carto.com/attributions');
 /// credit rather than UI copy, so it stays the same in every locale.
 const String mapCreditText = '© OpenStreetMap contributors, © CARTO';
 
-Future<void> _launchExternally(Uri url) async {
-  await launchUrl(url, mode: LaunchMode.externalApplication);
-}
-
 /// The full map credit for an interactive map: flutter_map's
 /// [SimpleAttributionWidget] reading "© OpenStreetMap contributors, © CARTO",
 /// with "OpenStreetMap" and "CARTO" each linking to their own page.
@@ -41,6 +37,10 @@ class MapAttribution extends StatefulWidget {
     this.bottomPadding = 0,
     this.openUrl = _launchExternally,
   });
+
+  static Future<void> _launchExternally(Uri url) async {
+    await launchUrl(url, mode: LaunchMode.externalApplication);
+  }
 
   @override
   State<MapAttribution> createState() => _MapAttributionState();
@@ -109,9 +109,10 @@ class CompactMapAttribution extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         decoration: BoxDecoration(
-          color: cs.surface.withValues(alpha: 0.7),
+          color: cs.surface.withValues(alpha: 0.8),
           borderRadius: const BorderRadius.only(topLeft: Radius.circular(4)),
         ),
+        // Muted text: the thumbnail credit should be legible, not loud.
         child: Text(
           mapCreditText,
           style: TextStyle(fontSize: 9, color: cs.onSurfaceVariant),
