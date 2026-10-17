@@ -3,6 +3,7 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:walkable/auto_stop.dart';
+import 'package:walkable/auto_stop_alerts.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -67,6 +68,7 @@ class WalkRecorder {
 
   final LocationService locationService;
   final WalkRepository _repository;
+  final AutoStopAlerts _alerts;
 
   /// The clock used for every time read (start/pause/resume/stop timestamps
   /// and ticker snapshots). Injectable so tests can drive time
@@ -126,8 +128,10 @@ class WalkRecorder {
   WalkRecorder({
     required this.locationService,
     required WalkRepository repository,
+    AutoStopAlerts alerts = const NoAutoStopAlerts(),
     DateTime Function() now = DateTime.now,
   })  : _repository = repository,
+        _alerts = alerts,
         _now = now;
 
   /// With an [autoStopLimit], the walk stops and saves itself once its moving
@@ -312,6 +316,9 @@ class WalkRecorder {
     final walk = await _stop(
         endTime:
             endTime == null || endTime.isAfter(limitEnd) ? limitEnd : endTime);
+    // Only a walk that was actually saved earns the "stopped and saved"
+    // notice; the stop itself already withdrew the warning.
+    if (walk != null) _alert(_alerts.showStoppedNotice);
     if (!_autoStops.isClosed) {
       _autoStops.add(AutoStop(
         walk: walk,
@@ -459,8 +466,23 @@ class WalkRecorder {
   }
 
   /// The one place the auto-stop warning is raised (by the ticker) or
-  /// cleared (by keepWalking(), a pause and the stop itself).
-  void _setAutoStopWarning(bool active) => _autoStopWarning = active;
+  /// cleared (by keepWalking(), a pause and the stop itself), and so the one
+  /// place the warning alert is shown or withdrawn.
+  void _setAutoStopWarning(bool active) {
+    if (active == _autoStopWarning) return;
+    _autoStopWarning = active;
+    _alert(active
+        ? () => _alerts.showWarning(_autoStopAt! - _elapsedAt(_now()))
+        : _alerts.cancelWarning);
+  }
+
+  /// Runs an [AutoStopAlerts] call without waiting on it. Alerts are
+  /// best-effort: a failure is logged and never reaches recording or the stop.
+  void _alert(Future<void> Function() call) {
+    unawaited(Future.sync(call).catchError((Object e) {
+      debugPrint('WalkRecorder: auto-stop alert failed: $e');
+    }));
+  }
 
   /// Pause-aware moving time up to [now]: accumulated time plus the open
   /// recording period, or just the accumulated time while paused.

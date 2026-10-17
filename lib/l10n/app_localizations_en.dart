@@ -268,4 +268,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get actionStopNow => 'Stop now';
+
+  @override
+  String get autoStopChannelName => 'Auto-stop warnings';
+
+  @override
+  String get autoStopChannelDescription =>
+      'Warns before a walk stops itself, and tells you when it has.';
+
+  @override
+  String autoStopWarningBody(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Your walk will stop in $minutes minutes.',
+      one: 'Your walk will stop in 1 minute.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoStopNoticeTitle => 'Walk stopped and saved';
+
+  @override
+  String get autoStopNoticeBody => 'Open Walkable to see your walk.';
 }
