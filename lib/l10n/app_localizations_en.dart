@@ -254,4 +254,18 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get autoStopWarningTitle => 'Still walking?';
+
+  @override
+  String autoStopWarningCountdown(String time) {
+    return 'Your walk will stop in $time';
+  }
+
+  @override
+  String get actionKeepWalking => 'Keep walking';
+
+  @override
+  String get actionStopNow => 'Stop now';
 }

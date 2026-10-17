@@ -65,6 +65,8 @@ void main() {
         .thenAnswer((_) async {});
     when(() => recorder.stop()).thenAnswer((_) async => null);
     when(() => recorder.reset()).thenReturn(null);
+    when(() => recorder.keepWalking()).thenReturn(null);
+    when(() => recorder.stopNow()).thenAnswer((_) async {});
 
     when(() => locationService.checkAndRequestPermission(
             foregroundConsent: any(named: 'foregroundConsent')))
@@ -1337,5 +1339,114 @@ void main() {
     verifyNever(() => recorder.stop());
     expect(find.text('Walk complete'), findsOneWidget);
     expect(find.byKey(const Key('auto_stopped_note')), findsOneWidget);
+  });
+
+  // ─── auto-stop warning banner ───────────────────────────────────────────────
+
+  WalkSnapshot warningSnapshot(Duration? autoStopIn) => WalkSnapshot(
+        stats:
+            const WalkStats(distanceMetres: 0, duration: Duration(minutes: 55)),
+        polyline: const [],
+        autoStopIn: autoStopIn,
+      );
+
+  Future<void> startRecording(WidgetTester tester, {Locale? locale}) async {
+    await tester.pumpWidget(await buildSubject(locale: locale));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    when(() => recorder.state).thenReturn(RecorderState.recording);
+  }
+
+  testWidgets('no auto-stop banner while no warning is active', (tester) async {
+    await startRecording(tester);
+
+    snapshotsCtrl.add(warningSnapshot(null));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('auto_stop_banner')), findsNothing);
+  });
+
+  testWidgets('the auto-stop banner counts down from the snapshot',
+      (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    await startRecording(tester);
+
+    snapshotsCtrl.add(warningSnapshot(const Duration(minutes: 5)));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('auto_stop_banner')), findsOneWidget);
+    expect(find.text('Still walking?'), findsOneWidget);
+    expect(find.text('Your walk will stop in 5:00'), findsOneWidget);
+
+    snapshotsCtrl.add(warningSnapshot(const Duration(minutes: 4, seconds: 7)));
+    await tester.pumpAndSettle();
+    expect(find.text('Your walk will stop in 4:07'), findsOneWidget);
+
+    // Keep walking (here or from a later notification) clears it.
+    snapshotsCtrl.add(warningSnapshot(null));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('auto_stop_banner')), findsNothing);
+  });
+
+  testWidgets('KEEP WALKING on the banner calls keepWalking', (tester) async {
+    await startRecording(tester);
+    snapshotsCtrl.add(warningSnapshot(const Duration(minutes: 5)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('auto_stop_keep_walking')));
+    await tester.pumpAndSettle();
+
+    verify(() => recorder.keepWalking()).called(1);
+    verifyNever(() => recorder.stopNow());
+  });
+
+  testWidgets(
+      'STOP NOW on the banner calls stopNow, and its auto-stop event shows '
+      'the summary with the note', (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    when(() => recorder.stopNow()).thenAnswer((_) async {
+      autoStopsCtrl
+          .add(AutoStop(walk: finishedWalk(), limit: AutoStopLimit.oneHour));
+    });
+    await startRecording(tester);
+    snapshotsCtrl.add(warningSnapshot(const Duration(minutes: 3)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('auto_stop_stop_now')));
+    await tester.pumpAndSettle();
+
+    verify(() => recorder.stopNow()).called(1);
+    verifyNever(() => recorder.stop());
+    expect(find.text('Walk complete'), findsOneWidget);
+    expect(
+        find.text('Walk stopped automatically after 1 hour'), findsOneWidget);
+  });
+
+  testWidgets('the auto-stop note counts the periods Keep walking added',
+      (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    await startRecording(tester);
+
+    autoStopsCtrl.add(AutoStop(
+        walk: finishedWalk(), limit: AutoStopLimit.twoHours, periods: 2));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('Walk stopped automatically after 4 hours'), findsOneWidget);
+  });
+
+  testWidgets('renders the auto-stop banner in Danish', (tester) async {
+    await startRecording(tester, locale: const Locale('da'));
+
+    snapshotsCtrl.add(warningSnapshot(const Duration(minutes: 5)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Går du stadig?'), findsOneWidget);
+    expect(find.text('Din gåtur stopper om 5:00'), findsOneWidget);
+    expect(find.text('FORTSÆT'), findsOneWidget);
+    expect(find.text('STOP NU'), findsOneWidget);
   });
 }
