@@ -118,14 +118,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get foregroundDisclosureBody =>
-      'Walkable collects location data to show your live position on the map and to record your walking route while you use the app. Your location data never leaves your device.\n\nNext, Android will ask you to allow location access.';
+      'Walkable collects location data to show your live position on the map and to record your walking route while you use the app. Your exact position and route are never sent anywhere; only the map tiles for the area on screen are downloaded from the map provider, CARTO.\n\nNext, Android will ask you to allow location access.';
 
   @override
   String get locationDisclosureTitle => 'Allow background location';
 
   @override
   String get locationDisclosureBody =>
-      'Walkable collects location data to record your walking route and show your live position on the map — including in the background, even when the app is closed or the screen is off. This keeps your walk recording while your phone is in your pocket. Your location is only used while a walk is running and never leaves your device.\n\nNext, Android will ask you to allow location access “All the time”.';
+      'Walkable collects location data to record your walking route and show your live position on the map — including in the background, even when the app is closed or the screen is off. This keeps your walk recording while your phone is in your pocket. Your location is only used while a walk is running, and your exact position and route are never sent anywhere; only the map tiles for the area on screen are downloaded from CARTO.\n\nNext, Android will ask you to allow location access “All the time”.';
 
   @override
   String get locationDisclosureAccept => 'Continue';

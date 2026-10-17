@@ -5,6 +5,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/l10n/app_localizations.dart';
+import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -162,6 +163,13 @@ void main() {
       LatLng(55.676, 12.568),
       LatLng(55.677, 12.569),
     ]);
+    // A compact credit on the thumbnail; the linked one is on the detail map.
+    expect(
+      find.descendant(
+          of: find.byType(FlutterMap),
+          matching: find.byType(CompactMapAttribution)),
+      findsOneWidget,
+    );
     // Taps must fall through the map to the card's InkWell.
     expect(
       find.ancestor(

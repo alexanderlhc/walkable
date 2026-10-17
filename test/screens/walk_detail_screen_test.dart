@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/l10n/app_localizations.dart';
+import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/screens/walk_detail_screen.dart';
@@ -78,6 +79,22 @@ void main() {
     await tester.pumpWidget(await buildSubject(_testWalk));
     await tester.pump();
     expect(find.byType(FlutterMap), findsOneWidget);
+  });
+
+  testWidgets('map credits OpenStreetMap and CARTO', (tester) async {
+    await tester.pumpWidget(await buildSubject(_testWalk));
+    await tester.pump();
+
+    expect(
+      find.descendant(
+          of: find.byType(FlutterMap), matching: find.byType(MapAttribution)),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('OpenStreetMap contributors, © CARTO',
+          findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets('stats labels are displayed', (tester) async {

@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
+import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/settings_screen.dart';
@@ -597,6 +598,9 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                       ),
                     ],
                   ),
+                // Lifted above the bottom panel, which overlays the map's
+                // bottom edge.
+                MapAttribution(bottomPadding: _bottomPanelHeight),
               ],
             ),
             _BottomPanel(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
+import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/theme.dart';
@@ -72,6 +73,7 @@ class WalkDetailScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+                const MapAttribution(),
               ],
             ),
           ),

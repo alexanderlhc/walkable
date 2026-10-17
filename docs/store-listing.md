@@ -19,7 +19,7 @@ Walkable is a simple, privacy-focused tool for tracking your walks.
 
 Start the walk, slip your phone in your pocket, and be present. Walkable takes care of the rest, recording your route and distance as you go.
 
-Your walks are yours. Nothing is tracked, nothing is uploaded. No ads. No sign-up.
+Your walks are yours. Nothing is tracked, and your walks are never uploaded. No ads. No sign-up.
 
 What you get:
   👣 Record your walk with one tap
@@ -42,7 +42,7 @@ Walkable er et enkelt værktøj til at holde styr på dine gåture – og det re
 
 Start gåturen, læg telefonen i lommen, og nyd øjeblikket. Walkable klarer resten og registrerer din rute og distance, mens du går.
 
-Dine gåture er dine. Intet bliver sporet, intet bliver uploadet. Ingen reklamer. Ingen oprettelse.
+Dine gåture er dine. Intet bliver sporet, og dine gåture bliver aldrig uploadet. Ingen reklamer. Ingen oprettelse.
 
 Det får du:
   👣 Optag din gåtur med ét tryk

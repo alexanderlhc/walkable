@@ -118,14 +118,14 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get foregroundDisclosureBody =>
-      'Walkable indsamler placeringsdata for at vise din position på kortet og registrere din gårute, mens du bruger appen. Dine placeringsdata forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade adgang til placering.';
+      'Walkable indsamler placeringsdata for at vise din position på kortet og registrere din gårute, mens du bruger appen. Din præcise position og rute sendes aldrig nogen steder hen; kun kortet for det viste område hentes fra kortudbyderen CARTO.\n\nDernæst beder Android dig om at tillade adgang til placering.';
 
   @override
   String get locationDisclosureTitle => 'Tillad placering i baggrunden';
 
   @override
   String get locationDisclosureBody =>
-      'Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.';
+      'Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og din præcise position og rute sendes aldrig nogen steder hen; kun kortet for det viste område hentes fra CARTO.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.';
 
   @override
   String get locationDisclosureAccept => 'Fortsæt';
