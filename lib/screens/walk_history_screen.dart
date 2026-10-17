@@ -158,26 +158,37 @@ class _WalkCard extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 16, 16, 18),
               child: Row(
                 children: [
-                  _Stat(
-                    value: units == UnitSystem.metric
-                        ? l10n.unitKm(stats.formattedDistance(units))
-                        : l10n.unitMi(stats.formattedDistance(units)),
-                    label: l10n.statDistance,
-                    emphasized: true,
+                  // Shrinks the stats on a narrow phone instead of overflowing;
+                  // at any normal width they keep their natural size.
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          _Stat(
+                            value: units == UnitSystem.metric
+                                ? l10n.unitKm(stats.formattedDistance(units))
+                                : l10n.unitMi(stats.formattedDistance(units)),
+                            label: l10n.statDistance,
+                            emphasized: true,
+                          ),
+                          const SizedBox(width: 28),
+                          _Stat(
+                            value: stats.formattedDuration(
+                                fallback: l10n.durationUnavailable),
+                            label: l10n.statDuration,
+                          ),
+                          const SizedBox(width: 28),
+                          _Stat(
+                            value: stats.formattedPace(units,
+                                fallback: l10n.paceUnavailable),
+                            label: l10n.statPace,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(width: 28),
-                  _Stat(
-                    value: stats.formattedDuration(
-                        fallback: l10n.durationUnavailable),
-                    label: l10n.statDuration,
-                  ),
-                  const SizedBox(width: 28),
-                  _Stat(
-                    value: stats.formattedPace(units,
-                        fallback: l10n.paceUnavailable),
-                    label: l10n.statPace,
-                  ),
-                  const Spacer(),
                   Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
                 ],
               ),
