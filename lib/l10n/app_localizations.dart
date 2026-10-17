@@ -511,6 +511,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{hours, plural, =1{Walk stopped automatically after 1 hour} other{Walk stopped automatically after {hours} hours}}'**
   String walkAutoStoppedNote(int hours);
+
+  /// No description provided for @autoStopWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Still walking?'**
+  String get autoStopWarningTitle;
+
+  /// In-app auto-stop banner; time is the moving time left, as m:ss.
+  ///
+  /// In en, this message translates to:
+  /// **'Your walk will stop in {time}'**
+  String autoStopWarningCountdown(String time);
+
+  /// No description provided for @actionKeepWalking.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep walking'**
+  String get actionKeepWalking;
+
+  /// No description provided for @actionStopNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop now'**
+  String get actionStopNow;
 }
 
 class _AppLocalizationsDelegate

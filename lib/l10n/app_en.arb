@@ -110,5 +110,15 @@
     "placeholders": {
       "hours": { "type": "int" }
     }
-  }
+  },
+  "autoStopWarningTitle": "Still walking?",
+  "autoStopWarningCountdown": "Your walk will stop in {time}",
+  "@autoStopWarningCountdown": {
+    "description": "In-app auto-stop banner; time is the moving time left, as m:ss.",
+    "placeholders": {
+      "time": { "type": "String" }
+    }
+  },
+  "actionKeepWalking": "Keep walking",
+  "actionStopNow": "Stop now"
 }

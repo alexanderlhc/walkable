@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
@@ -52,9 +51,9 @@ class ActiveWalkScreen extends StatefulWidget {
   State<ActiveWalkScreen> createState() => _ActiveWalkScreenState();
 }
 
-/// A finished walk the post-walk summary presents, with the auto-stop limit
-/// that ended it (null after a manual stop).
-typedef _CompletedWalk = ({Walk walk, AutoStopLimit? autoStoppedAt});
+/// A finished walk the post-walk summary presents, with the auto-stop limit in
+/// force when it ended, in hours (null after a manual stop).
+typedef _CompletedWalk = ({Walk walk, int? autoStoppedAfterHours});
 
 class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   WalkSnapshot? _snapshot;
@@ -139,7 +138,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     _autoStopSub = widget.recorder.autoStops.listen((autoStop) {
       widget.recorder.reset();
       if (!mounted) return;
-      _showStopped(autoStop.walk, autoStoppedAt: autoStop.limit);
+      _showStopped(autoStop.walk, autoStoppedAfterHours: autoStop.hours);
     });
     // Deferred to after the first frame: the foreground-location disclosure
     // dialog needs localizations and a Navigator, neither of which are
@@ -418,15 +417,16 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   }
 
   /// Post-stop landing shared by a manual stop and an auto-stop (which passes
-  /// its [autoStoppedAt] limit for the summary's note). The recorder has
+  /// its [autoStoppedAfterHours] for the summary's note). The recorder has
   /// already been reset.
-  void _showStopped(Walk? walk, {AutoStopLimit? autoStoppedAt}) {
+  void _showStopped(Walk? walk, {int? autoStoppedAfterHours}) {
     setState(() {
       _recorderState = RecorderState.idle;
       // Null (nothing recorded, or the save failed) skips the summary and
       // falls straight back to idle — there is no saved walk to present.
-      _completed =
-          walk == null ? null : (walk: walk, autoStoppedAt: autoStoppedAt);
+      _completed = walk == null
+          ? null
+          : (walk: walk, autoStoppedAfterHours: autoStoppedAfterHours);
     });
     if (walk != null) {
       // Fit the camera to the finished route once the summary panel has laid
@@ -611,6 +611,10 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
               onPause: _onPause,
               onResume: _onResume,
               onStop: _onStop,
+              // The banner's Stop now ends the walk through the recorder's
+              // auto-stop path; its event lands in the autoStops listener.
+              onKeepWalking: widget.recorder.keepWalking,
+              onStopNow: widget.recorder.stopNow,
               onHeightChanged: (height) {
                 if (mounted && height != _bottomPanelHeight) {
                   setState(() => _bottomPanelHeight = height);
@@ -764,6 +768,9 @@ class _BottomPanel extends StatefulWidget {
   final VoidCallback onPause;
   final VoidCallback onResume;
   final VoidCallback onStop;
+  // The auto-stop warning banner's buttons.
+  final VoidCallback onKeepWalking;
+  final VoidCallback onStopNow;
   // Reports the panel's rendered height so the map can treat the area it covers
   // as off-screen when deciding whether to surface the recentre chip.
   final ValueChanged<double> onHeightChanged;
@@ -780,6 +787,8 @@ class _BottomPanel extends StatefulWidget {
     required this.onPause,
     required this.onResume,
     required this.onStop,
+    required this.onKeepWalking,
+    required this.onStopNow,
     required this.onHeightChanged,
   });
 
@@ -912,10 +921,10 @@ class _BottomPanelState extends State<_BottomPanel> {
           l10n.walkCompleteSubtitle,
           style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
         ),
-        if (completed.autoStoppedAt case final limit?) ...[
+        if (completed.autoStoppedAfterHours case final hours?) ...[
           const SizedBox(height: 4),
           Text(
-            l10n.walkAutoStoppedNote(limit.hours),
+            l10n.walkAutoStoppedNote(hours),
             key: const Key('auto_stopped_note'),
             textAlign: TextAlign.center,
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
@@ -1006,10 +1015,18 @@ class _BottomPanelState extends State<_BottomPanel> {
     final signalLost = isRecording && (widget.snapshot?.signalLost ?? false);
     final stats = widget.snapshot?.stats ??
         WalkStats.fromParts(coordinates: const [], duration: Duration.zero);
+    // Stop's own confirmation pauses the walk, which clears the warning; the
+    // state check only covers the frame before that snapshot lands.
+    final autoStopIn =
+        isRecording && !_confirmingStop ? widget.snapshot?.autoStopIn : null;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (autoStopIn != null) ...[
+          _buildAutoStopBanner(l10n, autoStopIn),
+          const SizedBox(height: 16),
+        ],
         // Status indicator
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1127,6 +1144,88 @@ class _BottomPanelState extends State<_BottomPanel> {
                 ],
               ),
       ],
+    );
+  }
+
+  // Shown while the recorder's auto-stop warning is active: a live countdown
+  // to the stop, and the walker's choice to carry on or stop now.
+  Widget _buildAutoStopBanner(AppLocalizations l10n, Duration autoStopIn) {
+    final cs = Theme.of(context).colorScheme;
+    final seconds = autoStopIn.inSeconds;
+    final countdown =
+        '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+    const labelStyle = TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.2,
+    );
+    return Container(
+      key: const Key('auto_stop_banner'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: cs.tertiaryContainer,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        children: [
+          Text(
+            l10n.autoStopWarningTitle,
+            style: TextStyle(
+              color: cs.onTertiaryContainer,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            l10n.autoStopWarningCountdown(countdown),
+            style: TextStyle(
+              color: cs.onTertiaryContainer,
+              fontSize: 13,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  key: const Key('auto_stop_stop_now'),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    widget.onStopNow();
+                  },
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                    shape: const StadiumBorder(),
+                    foregroundColor: cs.onTertiaryContainer,
+                    textStyle: labelStyle,
+                  ),
+                  child: Text(l10n.actionStopNow.toUpperCase()),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  key: const Key('auto_stop_keep_walking'),
+                  onPressed: () {
+                    HapticFeedback.lightImpact();
+                    widget.onKeepWalking();
+                  },
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(44),
+                    shape: const StadiumBorder(),
+                    backgroundColor: cs.tertiary,
+                    foregroundColor: cs.onTertiary,
+                    textStyle: labelStyle,
+                  ),
+                  child: Text(l10n.actionKeepWalking.toUpperCase()),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

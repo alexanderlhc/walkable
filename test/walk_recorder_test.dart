@@ -194,11 +194,18 @@ class _AutoStopHarness {
     now: clock.now,
   );
   final List<AutoStop> autoStops = [];
+  final List<WalkSnapshot> snapshots = [];
   late final StreamSubscription<AutoStop> _sub;
+  late final StreamSubscription<WalkSnapshot> _snapshotSub;
 
   _AutoStopHarness(this.async) {
     _sub = recorder.autoStops.listen(autoStops.add);
+    _snapshotSub = recorder.snapshots.listen(snapshots.add);
   }
+
+  /// The moving time left until auto-stop per the latest snapshot; null when
+  /// no warning is active.
+  Duration? get autoStopIn => snapshots.last.autoStopIn;
 
   void flush() => async.flushMicrotasks();
 
@@ -214,6 +221,7 @@ class _AutoStopHarness {
 
   void dispose() {
     _sub.cancel();
+    _snapshotSub.cancel();
     recorder.dispose();
     location.dispose();
     flush();
@@ -1118,6 +1126,170 @@ void main() {
         h.record(limitTime);
         expect(h.recorder.state, RecorderState.stopped);
         expect(h.autoStops.last.walk!.duration, limitTime);
+      });
+    });
+
+    group('warning', () {
+      const grace = Duration(minutes: 5);
+
+      test('becomes active at exactly limit - 5 min, with the time left', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+
+          h.record(limitTime - grace - const Duration(seconds: 1));
+          expect(h.autoStopIn, isNull);
+
+          h.record(const Duration(seconds: 1));
+          expect(h.autoStopIn, grace);
+
+          h.record(const Duration(seconds: 1));
+          expect(h.autoStopIn, grace - const Duration(seconds: 1));
+        });
+      });
+
+      test(
+          'keep walking clears it; the next warning and the stop come one '
+          'full period later', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.keepWalking();
+          h.flush();
+          expect(h.autoStopIn, isNull);
+
+          // Past the original limit: still recording, no warning.
+          h.record(limitTime - const Duration(seconds: 1));
+          expect(h.recorder.state, RecorderState.recording);
+          expect(h.autoStopIn, isNull);
+
+          h.record(const Duration(seconds: 1));
+          expect(h.autoStopIn, grace);
+
+          h.record(grace);
+          expect(h.recorder.state, RecorderState.stopped);
+          expect(h.autoStops.single.walk!.duration, limitTime * 2);
+          // The summary note counts the limit in force: two periods.
+          expect(h.autoStops.single.hours, 2);
+        });
+      });
+
+      test('keep walking with no warning active does nothing', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(const Duration(minutes: 10));
+
+          h.recorder.keepWalking();
+
+          h.record(limitTime - grace - const Duration(minutes: 10));
+          expect(h.autoStopIn, grace);
+          h.record(grace);
+          expect(h.autoStops.single.walk!.duration, limitTime);
+          expect(h.autoStops.single.hours, 1);
+        });
+      });
+
+      test(
+          'stop now during the warning stops and saves the walk through the '
+          'auto-stop event', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - const Duration(minutes: 3));
+
+          h.recorder.stopNow();
+          h.flush();
+
+          expect(h.recorder.state, RecorderState.stopped);
+          expect(h.location.stopCalls, 1);
+          expect(h.autoStopIn, isNull);
+          final autoStop = h.autoStops.single;
+          // The walk ends now, not at the limit.
+          expect(
+              autoStop.walk!.duration, limitTime - const Duration(minutes: 3));
+          expect(autoStop.limit, limit);
+          expect(autoStop.hours, 1);
+
+          // The ticker is gone: no second event at the limit.
+          h.record(const Duration(minutes: 10));
+          expect(h.autoStops, hasLength(1));
+        });
+      });
+
+      test('stop now with no warning active does nothing', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(const Duration(minutes: 10));
+
+          h.recorder.stopNow();
+          h.flush();
+
+          expect(h.recorder.state, RecorderState.recording);
+          expect(h.autoStops, isEmpty);
+        });
+      });
+
+      test('a manual stop during the warning clears it', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.stop();
+          h.flush();
+
+          expect(h.recorder.state, RecorderState.stopped);
+          expect(h.autoStopIn, isNull);
+          expect(h.autoStops, isEmpty);
+        });
+      });
+
+      test(
+          'a pause during the warning clears it; paused time does not move '
+          'it', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace + const Duration(minutes: 1));
+          expect(h.autoStopIn, const Duration(minutes: 4));
+
+          h.recorder.pause();
+          h.flush();
+          expect(h.autoStopIn, isNull);
+          // Keep walking and stop now need an active warning.
+          h.recorder.stopNow();
+          h.flush();
+          expect(h.recorder.state, RecorderState.paused);
+
+          h.record(const Duration(hours: 2));
+          expect(h.autoStopIn, isNull);
+
+          // Resuming inside the window warns again with the same time left.
+          h.recorder.resume();
+          h.flush();
+          h.record(const Duration(seconds: 1));
+          expect(h.autoStopIn,
+              const Duration(minutes: 4) - const Duration(seconds: 1));
+        });
+      });
+
+      test('a stop now landing past the limit saves exactly the limit', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - const Duration(seconds: 1));
+
+          // The limit passes between ticks; the tap lands before the tick.
+          h.clock.advance(const Duration(milliseconds: 1500));
+          h.recorder.stopNow();
+          h.flush();
+
+          expect(h.autoStops.single.walk!.duration, limitTime);
+        });
       });
     });
   });
