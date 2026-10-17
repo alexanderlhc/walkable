@@ -1,18 +1,27 @@
 name: Release
 
-# A pushed v* tag releases to the internal track. To ship to production, run
-# this workflow by hand on the tag ("Use workflow from" → the tag) and pick
-# production. See docs/releasing.md.
+# A pushed v* tag builds and uploads to the internal track. To ship it, test
+# the internal build, then run this workflow by hand with "promote": it moves
+# that exact build from internal to production, without rebuilding. See
+# docs/releasing.md.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
     inputs:
-      track:
-        description: "Play Store track"
+      action:
+        description: "promote = internal build → production (no rebuild); build-internal = rebuild the tag picked under \"Use workflow from\" → internal"
         type: choice
-        options: [internal, production]
-        default: internal
+        options: [promote, build-internal]
+        default: promote
+      version_code:
+        description: "promote: version code to promote (empty = the latest on internal; set it when widening a staged rollout)"
+        type: string
+        required: false
+      rollout:
+        description: "promote: % of production users (100 = everyone; lower = staged rollout, run again to widen)"
+        type: string
+        default: "100"
 
 concurrency:
   group: release
@@ -23,6 +32,7 @@ permissions:
 
 jobs:
   deploy:
+    if: github.event_name == 'push' || inputs.action == 'build-internal'
     runs-on: ubuntu-latest
     steps:
       - name: Check secrets
@@ -82,5 +92,46 @@ jobs:
         working-directory: android
         env:
           PLAY_STORE_JSON_KEY: ${{ runner.temp }}/play-store-key.json
-          TRACK: ${{ inputs.track || 'internal' }}
-        run: bundle exec fastlane deploy track:"$TRACK"
+        run: bundle exec fastlane deploy
+
+  # Copies a release from internal to production on Play: no Flutter build, no
+  # keystore, only the Play service account.
+  promote:
+    if: github.event_name == 'workflow_dispatch' && inputs.action == 'promote'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets
+        env:
+          PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+        run: |
+          missing=0
+          for name in PLAY_STORE_JSON_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repo secret $name is not set (just release-secrets)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: android
+
+      - name: Materialize secrets
+        env:
+          PLAY_STORE_JSON_KEY_CONTENT: ${{ secrets.PLAY_STORE_JSON_KEY }}
+        run: |
+          umask 077
+          printf '%s\n' "$PLAY_STORE_JSON_KEY_CONTENT" > "$RUNNER_TEMP/play-store-key.json"
+
+      - name: Promote
+        working-directory: android
+        env:
+          PLAY_STORE_JSON_KEY: ${{ runner.temp }}/play-store-key.json
+          VERSION_CODE: ${{ inputs.version_code }}
+          ROLLOUT: ${{ inputs.rollout }}
+        run: bundle exec fastlane promote version_code:"$VERSION_CODE" rollout:"$ROLLOUT"

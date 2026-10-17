@@ -1,12 +1,14 @@
 default_platform(:android)
 
 platform :android do
-  desc "Build Flutter AAB and upload to Play Store (default: internal track)"
+  desc "Build Flutter AAB and upload it to the internal track. Production only"
+  desc "gets builds promoted from internal (lane promote), never fresh ones."
   desc "Version name comes from the git tag (v0.3.0 -> 0.3.0); version code is"
   desc "the highest code on Play (or in pubspec.yaml) + 1, so nothing is ever"
   desc "committed for a release."
   lane :deploy do |options|
-    track = options[:track] || "internal"
+    track = "internal"
+    UI.user_error!("deploy only uploads to internal; test the build there, then run lane promote") if options[:track] && options[:track] != track
 
     # The run must be for a tag (in CI: a push, or a manual run on a tag), so
     # the name always matches the code being built.
@@ -49,6 +51,44 @@ platform :android do
       track: track,
       aab: "../build/app/outputs/bundle/release/app-release.aab",
       skip_upload_apk: true,
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+  end
+
+  desc "Promote a build from the internal track to production, without rebuilding,"
+  desc "so production gets the exact binary tested on internal."
+  desc "version_code: which build (default: the highest code on internal)."
+  desc "rollout: percentage of users (default 100). To widen a staged rollout, run"
+  desc "again with the same version_code and a higher rollout."
+  lane :promote do |options|
+    rollout = options[:rollout].to_s.strip.delete_suffix("%")
+    rollout = "100" if rollout.empty?
+    unless rollout.match?(/\A\d+(\.\d+)?\z/) && rollout.to_f > 0 && rollout.to_f <= 100
+      UI.user_error!("rollout must be a percentage above 0 and at most 100 (got #{rollout.inspect})")
+    end
+
+    version_code = options[:version_code].to_s.strip
+    unless version_code.empty? || version_code.match?(/\A\d+\z/)
+      UI.user_error!("version_code must be a number (got #{version_code.inspect})")
+    end
+    codes = google_play_track_version_codes(track: "internal").map(&:to_i)
+    UI.user_error!("The internal track has no build to promote") if codes.empty?
+    version_code = version_code.empty? ? codes.max : version_code.to_i
+    UI.user_error!("Version code #{version_code} isn't on the internal track (it has #{codes.sort.join(', ')})") unless codes.include?(version_code)
+    UI.message("Promoting version code #{version_code} from internal to production (#{rollout}% of users)")
+
+    # No aab: supply finds the release on internal by version code and copies
+    # it to production. Below 100% it becomes a staged (inProgress) rollout.
+    upload_to_play_store(
+      track: "internal",
+      track_promote_to: "production",
+      version_code: version_code,
+      rollout: (rollout.to_f / 100).to_s,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
       skip_upload_metadata: true,
       skip_upload_changelogs: true,
       skip_upload_images: true,
