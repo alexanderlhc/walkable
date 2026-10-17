@@ -33,6 +33,11 @@ void main() {
   late StreamController<AutoStop> autoStopsCtrl;
   late SettingsController settingsController;
 
+  setUpAll(() {
+    registerFallbackValue(Duration.zero);
+    registerFallbackValue(DateTime(2026));
+  });
+
   setUp(() {
     recorder = MockWalkRecorder();
     locationService = MockLocationService();
@@ -80,6 +85,7 @@ void main() {
     Locale? locale,
     int recoveredWalkCount = 0,
     Future<void> Function(String text)? shareText,
+    WalkRecorder? walkRecorder,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     settingsController = SettingsController(SettingsRepository(prefs))..load();
@@ -88,7 +94,7 @@ void main() {
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       home: ActiveWalkScreen(
-        recorder: recorder,
+        recorder: walkRecorder ?? recorder,
         repository: repository,
         settingsController: settingsController,
         recoveredWalkCount: recoveredWalkCount,
@@ -564,6 +570,45 @@ void main() {
     expect(find.byKey(const Key('stop_button')), findsOneWidget);
     expect(find.byKey(const Key('pause_button')), findsNothing);
     expect(find.byKey(const Key('start_button')), findsNothing);
+  });
+
+  testWidgets('shows the paused panel when the location shutdown fails',
+      (tester) async {
+    // A real recorder: the failure lives inside pause(), which the mock
+    // recorder would stub away.
+    final realRecorder = WalkRecorder(
+      locationService: locationService,
+      repository: repository,
+    );
+    addTearDown(realRecorder.dispose);
+    when(() => locationService.start(
+          notification: any(named: 'notification'),
+          foregroundConsent: any(named: 'foregroundConsent'),
+          backgroundConsent: any(named: 'backgroundConsent'),
+        )).thenAnswer((_) async => LocationServiceResult.started);
+    // A controller made here cancels with a future fakeAsync can flush; a
+    // const empty stream's cancel never completes under the test binding.
+    final positions = StreamController<Position>(onCancel: () async {});
+    addTearDown(positions.close);
+    when(() => locationService.positions).thenAnswer((_) => positions.stream);
+    when(() => locationService.stop())
+        .thenAnswer((_) async => throw StateError('location stop rejected'));
+    when(() => repository.createWalk(any(), any())).thenAnswer((_) async {});
+    when(() => repository.updateProgress(any(), any()))
+        .thenAnswer((_) async {});
+
+    await tester.pumpWidget(await buildSubject(walkRecorder: realRecorder));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pause_button')));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('PAUSED'), findsOneWidget);
+    expect(find.byKey(const Key('resume_button')), findsOneWidget);
+    expect(find.byKey(const Key('pause_button')), findsNothing);
   });
 
   testWidgets('PAUSED label visible when paused', (tester) async {

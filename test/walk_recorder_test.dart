@@ -384,6 +384,43 @@ void main() {
     expect(recorder.state, RecorderState.stopped);
   });
 
+  test('a failed location shutdown still completes the pause', () async {
+    await recorder.start();
+    final snapshots = <WalkSnapshot>[];
+    final sub = recorder.snapshots.listen(snapshots.add);
+    clock.advance(const Duration(seconds: 20));
+    location.failStop = true;
+
+    await recorder.pause();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(recorder.state, RecorderState.paused);
+    expect(flaky.updateProgressCalls, [const Duration(seconds: 20)]);
+    expect(snapshots.last.stats.duration, const Duration(seconds: 20));
+    await sub.cancel();
+  });
+
+  test('resume and stop work after a pause whose shutdown failed', () async {
+    await recorder.start();
+    clock.advance(const Duration(seconds: 20));
+    location.failStop = true;
+    await recorder.pause();
+    location.failStop = false;
+
+    clock.advance(const Duration(seconds: 50));
+    await recorder.resume();
+    expect(recorder.state, RecorderState.recording);
+    location.emit(_pos(55.676, 12.568));
+    await Future<void>.delayed(Duration.zero);
+    clock.advance(const Duration(seconds: 10));
+
+    final walk = await recorder.stop();
+
+    expect(recorder.state, RecorderState.stopped);
+    expect(walk!.duration, const Duration(seconds: 30));
+    expect(walk.coordinates.length, 1);
+  });
+
   test('no coordinates added while paused', () async {
     await recorder.start();
     await recorder.pause();
