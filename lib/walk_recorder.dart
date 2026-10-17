@@ -24,7 +24,7 @@ class WalkSnapshot {
   final bool signalLost;
 
   /// While the auto-stop warning is active, the moving time left until the
-  /// walk stops itself; null when no warning is active. See
+  /// walk stops itself; null means no warning is active. See
   /// [WalkRecorder.autoStopGrace].
   final Duration? autoStopIn;
 
@@ -34,8 +34,6 @@ class WalkSnapshot {
     this.signalLost = false,
     this.autoStopIn,
   });
-
-  bool get autoStopWarning => autoStopIn != null;
 }
 
 /// The recorder auto-stopped a walk: its moving time reached the limit in
@@ -99,14 +97,11 @@ class WalkRecorder {
   Duration _accumulatedDuration = Duration.zero;
   // This walk's auto-stop limit, captured at start(). Null means Off.
   AutoStopLimit? _autoStopLimit;
-  // The moving time at which the walk stops itself: the limit, plus one more
-  // period per "keep walking". Null means Off.
-  Duration? _autoStopAt;
-  // Whether the auto-stop warning is up. Set by the ticker once moving time
-  // reaches [_autoStopAt] minus [autoStopGrace]; cleared by keepWalking(),
-  // a pause and the stop itself. Those writes are the warning's show/cancel
-  // edges, where a warning notification would hook in.
-  bool _warning = false;
+  // How many periods of [_autoStopLimit] are in force: one, plus one per
+  // "keep walking".
+  int _autoStopPeriods = 1;
+  // Whether the auto-stop warning is up. Only [_setAutoStopWarning] writes it.
+  bool _autoStopWarning = false;
   final List<Coordinate> _coordinates = [];
   // Set by a position stream error, cleared by the next fix. See [_onError].
   bool _signalLost = false;
@@ -162,7 +157,6 @@ class WalkRecorder {
       }
       _state = RecorderState.recording;
       _autoStopLimit = autoStopLimit;
-      _autoStopAt = autoStopLimit?.duration;
       _startTime = _now();
       _periodStart = _startTime;
       _id = _generateId(_startTime!);
@@ -192,7 +186,7 @@ class WalkRecorder {
     _signalLost = false;
     // Paused time doesn't count, so the warning waits too; the first tick
     // after a resume inside the window raises it again.
-    _warning = false;
+    _setAutoStopWarning(false);
     _state = RecorderState.paused;
     _ticker?.cancel();
     _ticker = null;
@@ -253,7 +247,7 @@ class WalkRecorder {
           _autoStop();
           return;
         }
-        if (!_warning && elapsed >= stopAt - autoStopGrace) _warning = true;
+        if (elapsed >= stopAt - autoStopGrace) _setAutoStopWarning(true);
       }
       _snapshots.add(_buildSnapshot(now));
       final lastPersist = _lastProgressPersist;
@@ -291,9 +285,9 @@ class WalkRecorder {
   /// full period from the current limit (2 h → 4 h → 6 h …) and clears the
   /// warning. Does nothing when no warning is active.
   void keepWalking() {
-    if (!_warning || _stopping) return;
-    _autoStopAt = _autoStopAt! + _autoStopLimit!.duration;
-    _warning = false;
+    if (!_autoStopWarning || _stopping) return;
+    _autoStopPeriods++;
+    _setAutoStopWarning(false);
     _snapshots.add(_buildSnapshot(_now()));
   }
 
@@ -301,7 +295,7 @@ class WalkRecorder {
   /// same path as reaching the limit, so it is announced on [autoStops] too.
   /// Does nothing when no warning is active.
   Future<void> stopNow() async {
-    if (!_warning || _stopping) return;
+    if (!_autoStopWarning || _stopping) return;
     await _autoStop(endTime: _now());
   }
 
@@ -322,7 +316,7 @@ class WalkRecorder {
       _autoStops.add(AutoStop(
         walk: walk,
         limit: limit,
-        periods: stopAt.inMicroseconds ~/ limit.duration.inMicroseconds,
+        periods: _autoStopPeriods,
       ));
     }
   }
@@ -347,7 +341,7 @@ class WalkRecorder {
   Future<Walk?> _finalize(DateTime end) async {
     _ticker?.cancel();
     _ticker = null;
-    _warning = false;
+    _setAutoStopWarning(false);
     // Freeze moving time at [end] before the async teardown below: the walk
     // ended then, however long the teardown takes.
     if (_periodStart != null) {
@@ -394,8 +388,7 @@ class WalkRecorder {
     _lastProgressPersist = null;
     _accumulatedDuration = Duration.zero;
     _autoStopLimit = null;
-    _autoStopAt = null;
-    _warning = false;
+    _autoStopPeriods = 1;
     _signalLost = false;
     _coordinates.clear();
     _persist = Future<void>.value();
@@ -459,6 +452,16 @@ class WalkRecorder {
     }
   }
 
+  /// The moving time at which the walk stops itself; null means Off.
+  Duration? get _autoStopAt {
+    final limit = _autoStopLimit;
+    return limit == null ? null : limit.duration * _autoStopPeriods;
+  }
+
+  /// The one place the auto-stop warning is raised (by the ticker) or
+  /// cleared (by keepWalking(), a pause and the stop itself).
+  void _setAutoStopWarning(bool active) => _autoStopWarning = active;
+
   /// Pause-aware moving time up to [now]: accumulated time plus the open
   /// recording period, or just the accumulated time while paused.
   Duration _elapsedAt(DateTime now) => _periodStart != null
@@ -472,7 +475,7 @@ class WalkRecorder {
           WalkStats.fromParts(coordinates: polyline, duration: _elapsedAt(now)),
       polyline: polyline,
       signalLost: _signalLost,
-      autoStopIn: _warning ? _autoStopAt! - _elapsedAt(now) : null,
+      autoStopIn: _autoStopWarning ? _autoStopAt! - _elapsedAt(now) : null,
     );
   }
 

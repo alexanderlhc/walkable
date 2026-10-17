@@ -1291,6 +1291,21 @@ void main() {
           expect(h.autoStops.single.walk!.duration, limitTime);
         });
       });
+
+      test('a signal-lost spell does not move the warning', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(const Duration(minutes: 30));
+          h.location.emitError(StateError('location off'));
+          h.flush();
+
+          h.record(limitTime - grace - const Duration(minutes: 30));
+
+          expect(h.snapshots.last.signalLost, isTrue);
+          expect(h.autoStopIn, grace);
+        });
+      });
     });
   });
 }
