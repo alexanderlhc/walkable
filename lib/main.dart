@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:walkable/auto_stop_alerts.dart';
 import 'package:walkable/auto_stop_notifications.dart';
+import 'package:walkable/battery_saver_notifications.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
@@ -47,13 +48,16 @@ void main() async {
   final locationService = LocationService();
   // System notifications are Android-only; the desktop builds used for
   // development go without.
-  final AutoStopAlerts alerts = defaultTargetPlatform == TargetPlatform.android
-      ? AutoStopNotifications(
-          localizations: () => lookupAppLocalizations(
-              settingsController.localeOverride ??
-                  resolveAppLocale(PlatformDispatcher.instance.locale)),
-        )
+  AppLocalizations localizations() =>
+      lookupAppLocalizations(settingsController.localeOverride ??
+          resolveAppLocale(PlatformDispatcher.instance.locale));
+  final android = defaultTargetPlatform == TargetPlatform.android;
+  final AutoStopAlerts alerts = android
+      ? AutoStopNotifications(localizations: localizations)
       : const NoAutoStopAlerts();
+  final BatterySaverAlerts batterySaverAlerts = android
+      ? BatterySaverNotifications(localizations: localizations)
+      : const NoBatterySaverAlerts();
   final recorder = WalkRecorder(
     locationService: locationService,
     repository: repository,
@@ -64,12 +68,16 @@ void main() async {
       onKeepWalking: recorder.keepWalking,
       onStopNow: recorder.stopNow,
     );
+    // Like the auto-stop alerts: a fresh process has no walk for a Battery
+    // Saver warning left by a dead one to be about.
+    await batterySaverAlerts.cancelWarning();
   }
   runApp(WalkableApp(
     recorder: recorder,
     repository: repository,
     settingsController: settingsController,
     recoveredWalkCount: recoveredWalks,
+    batterySaverAlerts: batterySaverAlerts,
   ));
 }
 
@@ -92,12 +100,16 @@ class WalkableApp extends StatelessWidget {
   /// main screen announces them once when the count is positive.
   final int recoveredWalkCount;
 
+  /// Announces Battery Saver cutting location mid-walk outside the app.
+  final BatterySaverAlerts batterySaverAlerts;
+
   const WalkableApp({
     super.key,
     required this.recorder,
     required this.repository,
     required this.settingsController,
     this.recoveredWalkCount = 0,
+    this.batterySaverAlerts = const NoBatterySaverAlerts(),
   });
 
   @override
@@ -135,6 +147,7 @@ class WalkableApp extends StatelessWidget {
           repository: repository,
           settingsController: settingsController,
           recoveredWalkCount: recoveredWalkCount,
+          batterySaverAlerts: batterySaverAlerts,
         ),
       ),
     );

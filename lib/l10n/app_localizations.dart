@@ -571,6 +571,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open Walkable to see your walk.'**
   String get autoStopNoticeBody;
+
+  /// Snackbar action opening Android's Battery Saver settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Saver'**
+  String get batterySaverSettings;
+
+  /// Android notification channel name, shown in the system's notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Saver warnings'**
+  String get batterySaverChannelName;
+
+  /// No description provided for @batterySaverChannelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Warns when Battery Saver starts turning off location during a walk.'**
+  String get batterySaverChannelDescription;
+
+  /// No description provided for @batterySaverNotificationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Saver is limiting your walk'**
+  String get batterySaverNotificationTitle;
+
+  /// No description provided for @settingsBackgroundTracking.
+  ///
+  /// In en, this message translates to:
+  /// **'Background tracking'**
+  String get settingsBackgroundTracking;
+
+  /// No description provided for @settingsBatterySaverSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery Saver can turn off location while the screen is locked.'**
+  String get settingsBatterySaverSubtitle;
+
+  /// No description provided for @settingsManufacturerHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep walks recording'**
+  String get settingsManufacturerHelp;
+
+  /// No description provided for @settingsManufacturerHelpSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone\'s own battery manager may stop Walkable in the background. dontkillmyapp.com shows how to prevent it.'**
+  String get settingsManufacturerHelpSubtitle;
 }
 
 class _AppLocalizationsDelegate

@@ -2,13 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
+import 'package:walkable/power_settings.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/units.dart';
 
 class SettingsScreen extends StatelessWidget {
   final SettingsController controller;
 
-  const SettingsScreen({super.key, required this.controller});
+  /// Backs the background-tracking shortcuts. Injectable for widget tests.
+  final PowerSettings powerSettings;
+
+  const SettingsScreen({
+    super.key,
+    required this.controller,
+    this.powerSettings = const PowerSettings(),
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -113,10 +121,56 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
+            _SectionHeader(l10n.settingsBackgroundTracking),
+            ListTile(
+              key: const Key('battery_saver_settings'),
+              leading: const Icon(Icons.battery_saver),
+              title: Text(l10n.batterySaverSettings),
+              subtitle: Text(l10n.settingsBatterySaverSubtitle),
+              onTap: powerSettings.openBatterySaverSettings,
+            ),
+            _ManufacturerHelpTile(powerSettings),
             const _VersionFooter(),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Links to dontkillmyapp.com's steps for this phone's maker, on phones whose
+/// own battery manager can stop the walk's foreground service despite the
+/// battery-optimisation exemption. Absent elsewhere.
+class _ManufacturerHelpTile extends StatefulWidget {
+  final PowerSettings powerSettings;
+
+  const _ManufacturerHelpTile(this.powerSettings);
+
+  @override
+  State<_ManufacturerHelpTile> createState() => _ManufacturerHelpTileState();
+}
+
+class _ManufacturerHelpTileState extends State<_ManufacturerHelpTile> {
+  // Fetched once: the settings list rebuilds on every setting change.
+  late final Future<Uri?> _page = widget.powerSettings.manufacturerHelpPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return FutureBuilder<Uri?>(
+      future: _page,
+      builder: (context, snapshot) {
+        final page = snapshot.data;
+        if (page == null) return const SizedBox.shrink();
+        return ListTile(
+          key: const Key('manufacturer_help'),
+          leading: const Icon(Icons.open_in_new),
+          title: Text(l10n.settingsManufacturerHelp),
+          subtitle: Text(l10n.settingsManufacturerHelpSubtitle),
+          onTap: () => widget.powerSettings.openPage(page),
+        );
+      },
     );
   }
 }

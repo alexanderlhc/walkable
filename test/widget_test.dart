@@ -39,6 +39,8 @@ void main() {
         .thenAnswer((_) async => true);
     when(() => locationService.watchPosition())
         .thenAnswer((_) => const Stream.empty());
+    when(() => locationService.batterySaverChanges)
+        .thenAnswer((_) => const Stream.empty());
   });
 
   tearDown(() => ctrl.close());

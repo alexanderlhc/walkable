@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:mocktail/mocktail.dart';
@@ -63,6 +65,8 @@ void main() {
         LocationPermissionKind.background: background,
         LocationPermissionKind.batteryOptimization: batteryOptimization,
       },
+      // The real watch needs the platform channel.
+      watchBatterySaver: () => const Stream.empty(),
     );
   });
 
@@ -195,6 +199,7 @@ void main() {
           LocationPermissionKind.batteryOptimization: batteryOptimization,
         },
         batterySaverRestrictsLocation: () async => true,
+        watchBatterySaver: () => const Stream.empty(),
       );
       when(() => mock.checkPermission())
           .thenAnswer((_) async => LocationPermission.always);
@@ -423,6 +428,98 @@ void main() {
           .thenAnswer((_) => Stream.fromIterable([p1, p2]));
 
       expect(await service.watchPosition().take(2).toList(), [p1, p2]);
+    });
+  });
+
+  group('Battery Saver mid-walk', () {
+    late StreamController<bool> batterySaver;
+    var watches = 0;
+
+    setUp(() {
+      batterySaver = StreamController<bool>.broadcast();
+      watches = 0;
+      service.dispose();
+      service = LocationService(
+        geolocator: mock,
+        permissions: {
+          LocationPermissionKind.notification: notifications,
+          LocationPermissionKind.background: background,
+          LocationPermissionKind.batteryOptimization: batteryOptimization,
+        },
+        batterySaverRestrictsLocation: () async => false,
+        watchBatterySaver: () {
+          watches++;
+          return batterySaver.stream;
+        },
+      );
+      when(() => mock.checkPermission())
+          .thenAnswer((_) async => LocationPermission.always);
+      when(
+        () => mock.getPositionStream(
+            locationSettings: any(named: 'locationSettings')),
+      ).thenAnswer((_) => const Stream.empty());
+    });
+
+    tearDown(() => batterySaver.close());
+
+    test('announces Battery Saver starting and stopping to restrict location',
+        () async {
+      final changes = <bool>[];
+      service.batterySaverChanges.listen(changes.add);
+      await service.start();
+
+      batterySaver.add(true);
+      await pumpEventQueue();
+      expect(service.batterySaverRestrictsLocation, isTrue);
+
+      batterySaver.add(false);
+      await pumpEventQueue();
+      expect(service.batterySaverRestrictsLocation, isFalse);
+      expect(changes, [true, false]);
+    });
+
+    test('ignores reports that do not change the restriction', () async {
+      final changes = <bool>[];
+      service.batterySaverChanges.listen(changes.add);
+      await service.start();
+
+      // Battery Saver toggling while its location mode is harmless reports
+      // "not restricted" again and again.
+      batterySaver
+        ..add(false)
+        ..add(true)
+        ..add(true);
+      await pumpEventQueue();
+
+      expect(changes, [true]);
+    });
+
+    test('only watches while running', () async {
+      final changes = <bool>[];
+      service.batterySaverChanges.listen(changes.add);
+      expect(watches, 0);
+
+      await service.start();
+      expect(watches, 1);
+      await service.stop();
+      batterySaver.add(true);
+      await pumpEventQueue();
+
+      expect(changes, isEmpty);
+      expect(batterySaver.hasListener, isFalse);
+    });
+
+    test('a failing watch is ignored', () async {
+      final changes = <bool>[];
+      service.batterySaverChanges.listen(changes.add, onError: (_) {
+        fail('the error must not reach listeners');
+      });
+      await service.start();
+
+      batterySaver.addError(Exception('channel gone'));
+      await pumpEventQueue();
+
+      expect(changes, isEmpty);
     });
   });
 }

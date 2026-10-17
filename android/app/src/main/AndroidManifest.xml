@@ -9,6 +9,17 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
+    <!-- Android 11+ package visibility: lets MainActivity resolve the Battery
+         Saver (or battery) settings page before opening it. -->
+    <queries>
+        <intent>
+            <action android:name="android.settings.BATTERY_SAVER_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.POWER_USAGE_SUMMARY" />
+        </intent>
+    </queries>
+
     <application
         android:label="Walkable"
         android:icon="@mipmap/ic_launcher">

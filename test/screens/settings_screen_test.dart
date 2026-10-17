@@ -4,15 +4,36 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
+import 'package:walkable/power_settings.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/screens/settings_screen.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/units.dart';
 
+class FakePowerSettings implements PowerSettings {
+  int batterySaverSettingsOpened = 0;
+  Uri? helpPage;
+  final openedPages = <Uri>[];
+
+  @override
+  Future<bool> openBatterySaverSettings() async {
+    batterySaverSettingsOpened++;
+    return true;
+  }
+
+  @override
+  Future<Uri?> manufacturerHelpPage() async => helpPage;
+
+  @override
+  Future<void> openPage(Uri page) async => openedPages.add(page);
+}
+
 void main() {
   late SettingsController controller;
+  late FakePowerSettings powerSettings;
 
   setUp(() {
+    powerSettings = FakePowerSettings();
     PackageInfo.setMockInitialValues(
       appName: 'Walkable',
       packageName: 'dk.raskrask.walkable',
@@ -33,7 +54,10 @@ void main() {
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: SettingsScreen(controller: controller),
+        home: SettingsScreen(
+          controller: controller,
+          powerSettings: powerSettings,
+        ),
       );
 
   testWidgets('shows language section with the three options', (tester) async {
@@ -329,5 +353,61 @@ void main() {
 
     await tester.scrollUntilVisible(find.text('Version 1.2.3 (45)'), 500);
     expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
+  });
+
+  // ─── background tracking ───────────────────────────────────────────────────
+
+  testWidgets('opens the Battery Saver settings', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const Key('battery_saver_settings'));
+    await tester.scrollUntilVisible(tile, 500);
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
+    await tester.tap(tile);
+
+    expect(powerSettings.batterySaverSettingsOpened, 1);
+  });
+
+  testWidgets('links to dontkillmyapp.com on phones whose maker kills apps',
+      (tester) async {
+    final page = Uri.parse('https://dontkillmyapp.com/samsung');
+    powerSettings.helpPage = page;
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const Key('manufacturer_help'));
+    await tester.scrollUntilVisible(tile, 500);
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
+    expect(find.text('Keep walks recording'), findsOneWidget);
+    await tester.tap(tile);
+
+    expect(powerSettings.openedPages, [page]);
+  });
+
+  testWidgets('has no dontkillmyapp.com link on other phones', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.text('Version 1.2.3 (45)'), 500);
+    expect(find.byKey(const Key('manufacturer_help')), findsNothing);
+  });
+
+  testWidgets('renders Danish background-tracking strings', (tester) async {
+    powerSettings.helpPage = Uri.parse('https://dontkillmyapp.com/xiaomi');
+    await setUpController({});
+    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('manufacturer_help')), 500);
+    expect(find.text('Sporing i baggrunden'), findsOneWidget);
+    expect(find.text('Batterisparefunktion'), findsOneWidget);
+    expect(find.text('Hold gåture i gang'), findsOneWidget);
   });
 }
