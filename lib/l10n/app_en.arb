@@ -141,5 +141,19 @@
     }
   },
   "autoStopNoticeTitle": "Walk stopped and saved",
-  "autoStopNoticeBody": "Open Walkable to see your walk."
+  "autoStopNoticeBody": "Open Walkable to see your walk.",
+  "batterySaverSettings": "Battery Saver",
+  "@batterySaverSettings": {
+    "description": "Snackbar action opening Android's Battery Saver settings."
+  },
+  "batterySaverChannelName": "Battery Saver warnings",
+  "@batterySaverChannelName": {
+    "description": "Android notification channel name, shown in the system's notification settings."
+  },
+  "batterySaverChannelDescription": "Warns when Battery Saver starts turning off location during a walk.",
+  "batterySaverNotificationTitle": "Battery Saver is limiting your walk",
+  "settingsBackgroundTracking": "Background tracking",
+  "settingsBatterySaverSubtitle": "Battery Saver can turn off location while the screen is locked.",
+  "settingsManufacturerHelp": "Keep walks recording",
+  "settingsManufacturerHelpSubtitle": "Your phone's own battery manager may stop Walkable in the background. dontkillmyapp.com shows how to prevent it."
 }

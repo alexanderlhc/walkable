@@ -303,4 +303,32 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get autoStopNoticeBody => 'Åbn Walkable for at se din gåtur.';
+
+  @override
+  String get batterySaverSettings => 'Batterisparefunktion';
+
+  @override
+  String get batterySaverChannelName => 'Advarsler om batterisparefunktion';
+
+  @override
+  String get batterySaverChannelDescription =>
+      'Advarer, når batterisparefunktionen begynder at slå placering fra under en gåtur.';
+
+  @override
+  String get batterySaverNotificationTitle =>
+      'Batterisparefunktionen begrænser din gåtur';
+
+  @override
+  String get settingsBackgroundTracking => 'Sporing i baggrunden';
+
+  @override
+  String get settingsBatterySaverSubtitle =>
+      'Batterisparefunktionen kan slå placering fra, når skærmen er låst.';
+
+  @override
+  String get settingsManufacturerHelp => 'Undgå at gåture stopper';
+
+  @override
+  String get settingsManufacturerHelpSubtitle =>
+      'Din telefons egen batteristyring kan stoppe Walkable i baggrunden. dontkillmyapp.com viser, hvordan du forhindrer det.';
 }

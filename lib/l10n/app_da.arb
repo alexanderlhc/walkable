@@ -78,5 +78,13 @@
   "autoStopChannelDescription": "Advarer, før en gåtur stopper af sig selv, og fortæller dig, når den er stoppet.",
   "autoStopWarningBody": "{minutes, plural, =1{Din gåtur stopper om 1 minut.} other{Din gåtur stopper om {minutes} minutter.}}",
   "autoStopNoticeTitle": "Gåtur stoppet og gemt",
-  "autoStopNoticeBody": "Åbn Walkable for at se din gåtur."
+  "autoStopNoticeBody": "Åbn Walkable for at se din gåtur.",
+  "batterySaverSettings": "Batterisparefunktion",
+  "batterySaverChannelName": "Advarsler om batterisparefunktion",
+  "batterySaverChannelDescription": "Advarer, når batterisparefunktionen begynder at slå placering fra under en gåtur.",
+  "batterySaverNotificationTitle": "Batterisparefunktionen begrænser din gåtur",
+  "settingsBackgroundTracking": "Sporing i baggrunden",
+  "settingsBatterySaverSubtitle": "Batterisparefunktionen kan slå placering fra, når skærmen er låst.",
+  "settingsManufacturerHelp": "Undgå at gåture stopper",
+  "settingsManufacturerHelpSubtitle": "Din telefons egen batteristyring kan stoppe Walkable i baggrunden. dontkillmyapp.com viser, hvordan du forhindrer det."
 }

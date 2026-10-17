@@ -303,4 +303,32 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoStopNoticeBody => 'Open Walkable to see your walk.';
+
+  @override
+  String get batterySaverSettings => 'Battery Saver';
+
+  @override
+  String get batterySaverChannelName => 'Battery Saver warnings';
+
+  @override
+  String get batterySaverChannelDescription =>
+      'Warns when Battery Saver starts turning off location during a walk.';
+
+  @override
+  String get batterySaverNotificationTitle =>
+      'Battery Saver is limiting your walk';
+
+  @override
+  String get settingsBackgroundTracking => 'Background tracking';
+
+  @override
+  String get settingsBatterySaverSubtitle =>
+      'Battery Saver can turn off location while the screen is locked.';
+
+  @override
+  String get settingsManufacturerHelp => 'Keep walks recording';
+
+  @override
+  String get settingsManufacturerHelpSubtitle =>
+      'Your phone\'s own battery manager may stop Walkable in the background. dontkillmyapp.com shows how to prevent it.';
 }

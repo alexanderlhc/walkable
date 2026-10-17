@@ -6,10 +6,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:walkable/battery_saver_notifications.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/power_settings.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/settings_screen.dart';
 import 'package:walkable/screens/walk_detail_screen.dart';
@@ -35,6 +37,14 @@ class ActiveWalkScreen extends StatefulWidget {
   /// channel; production uses the share_plus sheet.
   final Future<void> Function(String text) shareText;
 
+  /// Shortcuts to the system's power settings, offered next to the Battery
+  /// Saver warning and in the settings screen. Injectable for widget tests.
+  final PowerSettings powerSettings;
+
+  /// Tells a walker whose phone is locked that Battery Saver started cutting
+  /// location mid-walk.
+  final BatterySaverAlerts batterySaverAlerts;
+
   const ActiveWalkScreen({
     super.key,
     required this.recorder,
@@ -42,6 +52,8 @@ class ActiveWalkScreen extends StatefulWidget {
     required this.settingsController,
     this.recoveredWalkCount = 0,
     this.shareText = _systemShareSheet,
+    this.powerSettings = const PowerSettings(),
+    this.batterySaverAlerts = const NoBatterySaverAlerts(),
   });
 
   static Future<void> _systemShareSheet(String text) async {
@@ -61,6 +73,14 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   late RecorderState _recorderState;
   late StreamSubscription<WalkSnapshot> _sub;
   late StreamSubscription<AutoStop> _autoStopSub;
+  late StreamSubscription<bool> _batterySaverSub;
+  // The mid-walk Battery Saver warning while it shows, so it can go away
+  // again once Battery Saver stops restricting location.
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>?
+      _batterySaverSnackBar;
+  // Whether the Battery Saver notification is up, to be withdrawn when the
+  // walk pauses or ends.
+  bool _batterySaverNotified = false;
   final MapController _mapController = MapController();
   bool _locationPermissionGranted = false;
   bool _recentring = false;
@@ -141,6 +161,8 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       if (!mounted) return;
       _showStopped(autoStop.walk, autoStop: autoStop);
     });
+    _batterySaverSub = widget.recorder.locationService.batterySaverChanges
+        .listen(_onBatterySaverChanged);
     // Deferred to after the first frame: the foreground-location disclosure
     // dialog needs localizations and a Navigator, neither of which are
     // available synchronously in initState.
@@ -205,6 +227,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   void dispose() {
     _sub.cancel();
     _autoStopSub.cancel();
+    _batterySaverSub.cancel();
     _positionSub?.cancel();
     _mapController.dispose();
     super.dispose();
@@ -344,12 +367,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       );
     }
     if (widget.recorder.locationService.batterySaverRestrictsLocation) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(l10n.batterySaverLocationWarning),
-          duration: const Duration(seconds: 8),
-        ),
-      );
+      _showBatterySaverSnackBar();
     }
     if (!widget.recorder.locationService.batteryOptimizationGranted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -395,7 +413,50 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     }
   }
 
+  // Battery Saver started (true) or stopped (false) cutting location while
+  // recording. The walker may have the phone locked in a pocket — Battery
+  // Saver also kicks in by itself at low battery — so starting is announced by
+  // notification too.
+  void _onBatterySaverChanged(bool restricts) {
+    if (!mounted) return;
+    if (restricts) {
+      _showBatterySaverSnackBar();
+      _batterySaverNotified = true;
+      widget.batterySaverAlerts.showWarning();
+    } else {
+      _batterySaverSnackBar?.close();
+      _withdrawBatterySaverNotification();
+    }
+  }
+
+  void _showBatterySaverSnackBar() {
+    final l10n = AppLocalizations.of(context)!;
+    final snackBar = ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(l10n.batterySaverLocationWarning),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: l10n.batterySaverSettings,
+          onPressed: widget.powerSettings.openBatterySaverSettings,
+        ),
+      ),
+    );
+    _batterySaverSnackBar = snackBar;
+    snackBar.closed.then((_) {
+      if (identical(_batterySaverSnackBar, snackBar)) {
+        _batterySaverSnackBar = null;
+      }
+    });
+  }
+
+  void _withdrawBatterySaverNotification() {
+    if (!_batterySaverNotified) return;
+    _batterySaverNotified = false;
+    widget.batterySaverAlerts.cancelWarning();
+  }
+
   Future<void> _onPause() async {
+    _withdrawBatterySaverNotification();
     await widget.recorder.pause();
     if (!mounted) return;
     setState(() => _recorderState = RecorderState.paused);
@@ -408,6 +469,12 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     // Reflect the recorder's actual state: resume() stays paused when the
     // location permission was revoked in the meantime.
     setState(() => _recorderState = widget.recorder.state);
+    // Battery Saver may have come on during the pause, unannounced: nothing
+    // watches it while location is off.
+    if (_recorderState == RecorderState.recording &&
+        widget.recorder.locationService.batterySaverRestrictsLocation) {
+      _showBatterySaverSnackBar();
+    }
   }
 
   Future<void> _onStop() async {
@@ -421,6 +488,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   /// its [autoStop] for the summary's note). The recorder has already been
   /// reset.
   void _showStopped(Walk? walk, {AutoStop? autoStop}) {
+    _withdrawBatterySaverNotification();
     setState(() {
       _recorderState = RecorderState.idle;
       // Null (nothing recorded, or the save failed) skips the summary and
@@ -656,6 +724,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
                       MaterialPageRoute(
                         builder: (_) => SettingsScreen(
                           controller: widget.settingsController,
+                          powerSettings: widget.powerSettings,
                         ),
                       ),
                     ),

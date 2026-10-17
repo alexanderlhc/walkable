@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:walkable/power_settings.dart';
 
 export 'package:geolocator/geolocator.dart' show Position;
 
@@ -121,7 +122,18 @@ Map<LocationPermissionKind, RuntimePermission> defaultLocationPermissions() => {
 /// override that mode, so all the app can do is warn the user.
 typedef BatterySaverCheck = Future<bool> Function();
 
-const _powerChannel = MethodChannel('walkable/power');
+/// Reports, each time Battery Saver switches on or off (or its policy
+/// changes), whether it now restricts location as [BatterySaverCheck] defines.
+/// Subscribed only while tracking, so a walk notices Battery Saver kicking in
+/// mid-walk — switched on by hand, or automatically at low battery.
+typedef BatterySaverWatch = Stream<bool> Function();
+
+const _powerSaveModeChannel =
+    EventChannel('walkable/power/locationPowerSaveMode');
+
+// The screen-off PowerManager.LOCATION_MODE_* values; see
+// [defaultBatterySaverRestrictsLocation].
+bool _restrictsLocation(int? mode) => mode == 1 || mode == 2 || mode == 4;
 
 /// Default [BatterySaverCheck], asking `PowerManager.getLocationPowerSaveMode()`
 /// through MainActivity. Restrictive are the screen-off modes:
@@ -132,12 +144,24 @@ const _powerChannel = MethodChannel('walkable/power');
 Future<bool> defaultBatterySaverRestrictsLocation() async {
   if (defaultTargetPlatform != TargetPlatform.android) return false;
   try {
-    final mode = await _powerChannel.invokeMethod<int>('locationPowerSaveMode');
-    return mode == 1 || mode == 2 || mode == 4;
+    final mode = await powerChannel.invokeMethod<int>('locationPowerSaveMode');
+    return _restrictsLocation(mode);
   } catch (e) {
     debugPrint('LocationService: battery saver check failed: $e');
     return false;
   }
+}
+
+/// Default [BatterySaverWatch]: MainActivity forwards
+/// `PowerManager.ACTION_POWER_SAVE_MODE_CHANGED` with the new
+/// `getLocationPowerSaveMode()`. Empty off Android.
+Stream<bool> defaultWatchBatterySaver() {
+  if (defaultTargetPlatform != TargetPlatform.android) {
+    return const Stream.empty();
+  }
+  return _powerSaveModeChannel
+      .receiveBroadcastStream()
+      .map((mode) => _restrictsLocation(mode as int?));
 }
 
 class _DefaultGeolocator implements GeolocatorInterface {
@@ -174,9 +198,11 @@ class LocationService {
     GeolocatorInterface? geolocator,
     Map<LocationPermissionKind, RuntimePermission>? permissions,
     BatterySaverCheck? batterySaverRestrictsLocation,
+    BatterySaverWatch? watchBatterySaver,
   })  : _geolocator = geolocator ?? _DefaultGeolocator(),
         _batterySaverCheck = batterySaverRestrictsLocation ??
             defaultBatterySaverRestrictsLocation,
+        _watchBatterySaver = watchBatterySaver ?? defaultWatchBatterySaver,
         // Merge any injected overrides over the defaults so the map is always
         // complete — callers (and tests) can supply just the roles they care
         // about.
@@ -185,9 +211,13 @@ class LocationService {
   final GeolocatorInterface _geolocator;
   final Map<LocationPermissionKind, RuntimePermission> _permissions;
   final BatterySaverCheck _batterySaverCheck;
+  final BatterySaverWatch _watchBatterySaver;
   final StreamController<Position> _controller =
       StreamController<Position>.broadcast();
+  final StreamController<bool> _batterySaverChanges =
+      StreamController<bool>.broadcast();
   StreamSubscription<Position>? _subscription;
+  StreamSubscription<bool>? _batterySaverSubscription;
   bool _running = false;
   bool _notificationsGranted = true;
   bool _backgroundGranted = true;
@@ -212,10 +242,16 @@ class LocationService {
   /// foreground service running, causing gaps or total loss of tracking.
   bool get batteryOptimizationGranted => _batteryOptimizationGranted;
 
-  /// Whether Battery Saver was set to cut location with the screen off at the
-  /// most recent [start]. When `true`, the walk will have gaps while the
-  /// screen is locked and the user should be warned.
+  /// Whether Battery Saver cuts location with the screen off: checked at the
+  /// most recent [start] and kept current while running. When `true`, the
+  /// walk will have gaps while the screen is locked and the user should be
+  /// warned.
   bool get batterySaverRestrictsLocation => _batterySaverRestrictsLocation;
+
+  /// Emits [batterySaverRestrictsLocation]'s new value each time it changes
+  /// while running — Battery Saver starting (`true`) or ceasing (`false`) to
+  /// restrict location mid-walk. The value [start] reads is not emitted.
+  Stream<bool> get batterySaverChanges => _batterySaverChanges.stream;
 
   /// Opens the OS app settings so the user can re-enable a denied permission.
   Future<void> openSettings() => openAppSettings();
@@ -304,6 +340,17 @@ class LocationService {
             .ensureGranted();
 
     _batterySaverRestrictsLocation = await _batterySaverCheck();
+    _batterySaverSubscription = _watchBatterySaver().listen(
+      (restricts) {
+        if (restricts == _batterySaverRestrictsLocation) return;
+        _batterySaverRestrictsLocation = restricts;
+        _batterySaverChanges.add(restricts);
+      },
+      // Best-effort like the check: a broken watch just means no mid-walk
+      // warning.
+      onError: (Object e) =>
+          debugPrint('LocationService: battery saver watch failed: $e'),
+    );
 
     _running = true;
     _subscription = _geolocator
@@ -314,6 +361,8 @@ class LocationService {
   }
 
   Future<void> stop() async {
+    await _batterySaverSubscription?.cancel();
+    _batterySaverSubscription = null;
     await _subscription?.cancel();
     _subscription = null;
     _running = false;
@@ -322,6 +371,7 @@ class LocationService {
   void dispose() {
     stop();
     _controller.close();
+    _batterySaverChanges.close();
   }
 
   LocationSettings _buildSettings(ForegroundNotificationText? notification) {

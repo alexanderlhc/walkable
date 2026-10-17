@@ -7,10 +7,12 @@ import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/auto_stop.dart';
+import 'package:walkable/battery_saver_notifications.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
+import 'package:walkable/power_settings.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/screens/active_walk_screen.dart';
@@ -26,6 +28,34 @@ class MockLocationService extends Mock implements LocationService {}
 
 class MockWalkRepository extends Mock implements WalkRepository {}
 
+class FakePowerSettings implements PowerSettings {
+  int batterySaverSettingsOpened = 0;
+  Uri? helpPage;
+  final openedPages = <Uri>[];
+
+  @override
+  Future<bool> openBatterySaverSettings() async {
+    batterySaverSettingsOpened++;
+    return true;
+  }
+
+  @override
+  Future<Uri?> manufacturerHelpPage() async => helpPage;
+
+  @override
+  Future<void> openPage(Uri page) async => openedPages.add(page);
+}
+
+class FakeBatterySaverAlerts implements BatterySaverAlerts {
+  final calls = <String>[];
+
+  @override
+  Future<void> showWarning() async => calls.add('show');
+
+  @override
+  Future<void> cancelWarning() async => calls.add('cancel');
+}
+
 void main() {
   late MockWalkRecorder recorder;
   late MockLocationService locationService;
@@ -33,6 +63,9 @@ void main() {
   late StreamController<WalkSnapshot> snapshotsCtrl;
   late StreamController<AutoStop> autoStopsCtrl;
   late SettingsController settingsController;
+  late StreamController<bool> batterySaverCtrl;
+  late FakePowerSettings powerSettings;
+  late FakeBatterySaverAlerts batterySaverAlerts;
 
   setUpAll(() {
     registerFallbackValue(Duration.zero);
@@ -45,6 +78,9 @@ void main() {
     repository = MockWalkRepository();
     snapshotsCtrl = StreamController<WalkSnapshot>.broadcast();
     autoStopsCtrl = StreamController<AutoStop>.broadcast();
+    batterySaverCtrl = StreamController<bool>.broadcast();
+    powerSettings = FakePowerSettings();
+    batterySaverAlerts = FakeBatterySaverAlerts();
     SharedPreferences.setMockInitialValues({});
     // SharedPreferences.getInstance() resolves synchronously enough for
     // setUp; fetch it inside buildSubject instead to keep setUp sync — see
@@ -77,11 +113,14 @@ void main() {
     when(() => locationService.notificationsGranted).thenReturn(true);
     when(() => locationService.batteryOptimizationGranted).thenReturn(true);
     when(() => locationService.batterySaverRestrictsLocation).thenReturn(false);
+    when(() => locationService.batterySaverChanges)
+        .thenAnswer((_) => batterySaverCtrl.stream);
   });
 
   tearDown(() {
     snapshotsCtrl.close();
     autoStopsCtrl.close();
+    batterySaverCtrl.close();
   });
 
   Future<Widget> buildSubject({
@@ -103,6 +142,8 @@ void main() {
         recoveredWalkCount: recoveredWalkCount,
         // Never hit the real share_plus platform channel in widget tests.
         shareText: shareText ?? (_) async {},
+        powerSettings: powerSettings,
+        batterySaverAlerts: batterySaverAlerts,
       ),
     );
   }
@@ -531,7 +572,160 @@ void main() {
     await tester.tap(find.byKey(const Key('start_button')));
     await tester.pump();
 
-    expect(find.textContaining('Battery Saver'), findsOneWidget);
+    expect(find.textContaining('Battery Saver turns off'), findsOneWidget);
+  });
+
+  testWidgets('the Battery Saver warning opens the Battery Saver settings',
+      (tester) async {
+    when(() => locationService.batterySaverRestrictsLocation).thenReturn(true);
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 750));
+    await tester.tap(find.widgetWithText(SnackBarAction, 'Battery Saver'));
+    await tester.pump();
+
+    expect(powerSettings.batterySaverSettingsOpened, 1);
+  });
+
+  testWidgets(
+      'warns, in-app and by notification, when Battery Saver kicks in '
+      'mid-walk', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Battery Saver turns off'), findsNothing);
+
+    batterySaverCtrl.add(true);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.textContaining('Battery Saver turns off'), findsOneWidget);
+    expect(
+        find.widgetWithText(SnackBarAction, 'Battery Saver'), findsOneWidget);
+    expect(batterySaverAlerts.calls, ['show']);
+  });
+
+  testWidgets(
+      'shows a Battery Saver warning raised in the background on '
+      'returning to the app', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    // Battery Saver kicks in with the phone locked. A backgrounded app draws
+    // no frames, so the snackbar can't animate in and its timeout can't start:
+    // it waits for the walker instead of expiring unseen.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    batterySaverCtrl.add(true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle(const Duration(seconds: 10));
+    expect(find.textContaining('Battery Saver turns off'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.textContaining('Battery Saver turns off'), findsOneWidget);
+  });
+
+  testWidgets(
+      'drops a background Battery Saver warning once it stopped '
+      'restricting', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    batterySaverCtrl.add(true);
+    await tester.pump();
+    batterySaverCtrl.add(false);
+    await tester.pumpAndSettle(const Duration(seconds: 10));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.textContaining('Battery Saver turns off'), findsNothing);
+  });
+
+  testWidgets(
+      'withdraws the Battery Saver notification once it stops '
+      'restricting location', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    batterySaverCtrl.add(true);
+    await tester.pump();
+    batterySaverCtrl.add(false);
+    await tester.pumpAndSettle();
+
+    expect(batterySaverAlerts.calls, ['show', 'cancel']);
+    expect(find.textContaining('Battery Saver turns off'), findsNothing);
+  });
+
+  testWidgets('withdraws the Battery Saver notification when the walk pauses',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    batterySaverCtrl.add(true);
+    await tester.pump();
+
+    when(() => recorder.state).thenReturn(RecorderState.paused);
+    await tester.tap(find.byKey(const Key('pause_button')));
+    await tester.pumpAndSettle();
+
+    expect(batterySaverAlerts.calls, ['show', 'cancel']);
+  });
+
+  testWidgets('withdraws the Battery Saver notification when the walk stops',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    batterySaverCtrl.add(true);
+    await tester.pump();
+
+    autoStopsCtrl.add(AutoStop(walk: null, limit: AutoStopLimit.twoHours));
+    await tester.pumpAndSettle();
+
+    expect(batterySaverAlerts.calls, ['show', 'cancel']);
+  });
+
+  testWidgets('warns on resume when Battery Saver came on during the pause',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    when(() => recorder.state).thenReturn(RecorderState.paused);
+    await tester.tap(find.byKey(const Key('pause_button')));
+    await tester.pumpAndSettle();
+
+    when(() => locationService.batterySaverRestrictsLocation).thenReturn(true);
+    when(() => recorder.state).thenReturn(RecorderState.recording);
+    await tester.tap(find.byKey(const Key('resume_button')));
+    await tester.pump();
+
+    expect(find.textContaining('Battery Saver turns off'), findsOneWidget);
+    // The walker is looking at the app; the notification is for a locked
+    // phone.
+    expect(batterySaverAlerts.calls, isEmpty);
   });
 
   testWidgets('menu chip remains visible during recording', (tester) async {
