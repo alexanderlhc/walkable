@@ -45,6 +45,8 @@ makers (Google, Nokia/HMD, HTC) score 0 and get no link.
 - **Detecting whether an OEM manager is active or has killed the app.** No
   public API reports it.
 - **Exemption via official APIs.** The only one is the battery-optimisation
-  exemption the app already requests. Since One UI 6 (Android 14), Samsung
-  states that foreground services built to the Android 14 FGS policy are
-  respected. Walkable's location FGS is built that way.
+  exemption the app already requests. Samsung has stated that from One UI 6.0,
+  foreground services of apps targeting Android 14 work as intended when they
+  follow the new FGS policy
+  ([Android Developers Blog, May 2023](https://android-developers.googleblog.com/2023/05/improving-consistency-of-background-work-on-android.html)).
+  Walkable's location FGS follows it.

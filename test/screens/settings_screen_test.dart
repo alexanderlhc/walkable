@@ -408,6 +408,6 @@ void main() {
         find.byKey(const Key('manufacturer_help')), 500);
     expect(find.text('Sporing i baggrunden'), findsOneWidget);
     expect(find.text('Batterisparefunktion'), findsOneWidget);
-    expect(find.text('Hold gåture i gang'), findsOneWidget);
+    expect(find.text('Undgå at gåture stopper'), findsOneWidget);
   });
 }

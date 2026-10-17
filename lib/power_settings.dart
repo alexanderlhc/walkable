@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-const _powerChannel = MethodChannel('walkable/power');
+/// MainActivity's power channel: Battery Saver state, power settings
+/// shortcuts and the phone's manufacturer.
+const powerChannel = MethodChannel('walkable/power');
 
 /// dontkillmyapp.com pages for the manufacturers whose battery managers it
 /// rates as stopping background apps (2 of 5 or worse), keyed by the
@@ -52,7 +54,7 @@ class PowerSettings {
   Future<bool> openBatterySaverSettings() async {
     if (defaultTargetPlatform != TargetPlatform.android) return false;
     try {
-      return await _powerChannel
+      return await powerChannel
               .invokeMethod<bool>('openBatterySaverSettings') ??
           false;
     } catch (e) {
@@ -67,7 +69,7 @@ class PowerSettings {
     if (defaultTargetPlatform != TargetPlatform.android) return null;
     try {
       final manufacturer =
-          await _powerChannel.invokeMethod<String>('manufacturer');
+          await powerChannel.invokeMethod<String>('manufacturer');
       return manufacturer == null ? null : dontKillMyAppPage(manufacturer);
     } catch (e) {
       debugPrint('PowerSettings: reading the manufacturer failed: $e');

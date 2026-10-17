@@ -367,7 +367,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
       );
     }
     if (widget.recorder.locationService.batterySaverRestrictsLocation) {
-      _showBatterySaverWarning();
+      _showBatterySaverSnackBar();
     }
     if (!widget.recorder.locationService.batteryOptimizationGranted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -420,7 +420,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   void _onBatterySaverChanged(bool restricts) {
     if (!mounted) return;
     if (restricts) {
-      _showBatterySaverWarning();
+      _showBatterySaverSnackBar();
       _batterySaverNotified = true;
       widget.batterySaverAlerts.showWarning();
     } else {
@@ -429,7 +429,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     }
   }
 
-  void _showBatterySaverWarning() {
+  void _showBatterySaverSnackBar() {
     final l10n = AppLocalizations.of(context)!;
     final snackBar = ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -473,7 +473,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     // watches it while location is off.
     if (_recorderState == RecorderState.recording &&
         widget.recorder.locationService.batterySaverRestrictsLocation) {
-      _showBatterySaverWarning();
+      _showBatterySaverSnackBar();
     }
   }
 

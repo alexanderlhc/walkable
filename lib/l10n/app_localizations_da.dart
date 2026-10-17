@@ -326,7 +326,7 @@ class AppLocalizationsDa extends AppLocalizations {
       'Batterisparefunktionen kan slå placering fra, når skærmen er låst.';
 
   @override
-  String get settingsManufacturerHelp => 'Hold gåture i gang';
+  String get settingsManufacturerHelp => 'Undgå at gåture stopper';
 
   @override
   String get settingsManufacturerHelpSubtitle =>

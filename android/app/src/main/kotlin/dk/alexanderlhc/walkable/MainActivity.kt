@@ -16,6 +16,9 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    // The Battery Saver receiver while Dart listens; see configureFlutterEngine.
+    private var powerSaveReceiver: BroadcastReceiver? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Edge-to-edge for Android 15: draw behind the system bars. Flutter's
@@ -44,18 +47,17 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
-        // Emits locationPowerSaveMode() each time Battery Saver switches on or
-        // off, so a walk in progress notices it mid-walk. The receiver lives
-        // only while Dart listens (a walk is recording), and as a
-        // context-registered receiver it keeps receiving with the screen off
+        // Emits locationPowerSaveMode() on listen and each time Battery Saver
+        // switches on or off, so a walk in progress notices it mid-walk. The
+        // receiver lives only while Dart listens (a walk is recording), and as
+        // a context-registered receiver it keeps receiving with the screen off
         // for as long as the foreground service keeps the process alive.
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "walkable/power/locationPowerSaveMode",
         ).setStreamHandler(object : EventChannel.StreamHandler {
-            private var receiver: BroadcastReceiver? = null
-
             override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
+                unregisterPowerSaveReceiver()
                 val r = object : BroadcastReceiver() {
                     override fun onReceive(context: Context, intent: Intent) {
                         events.success(locationPowerSaveMode())
@@ -68,14 +70,26 @@ class MainActivity : FlutterActivity() {
                     // A system broadcast: other apps need not reach it.
                     ContextCompat.RECEIVER_NOT_EXPORTED,
                 )
-                receiver = r
+                powerSaveReceiver = r
+                // The broadcast isn't sticky: report the mode now too, so a
+                // switch between Dart's start check and this listen isn't lost.
+                events.success(locationPowerSaveMode())
             }
 
-            override fun onCancel(arguments: Any?) {
-                receiver?.let { applicationContext.unregisterReceiver(it) }
-                receiver = null
-            }
+            override fun onCancel(arguments: Any?) = unregisterPowerSaveReceiver()
         })
+    }
+
+    // The engine can go without Dart cancelling its stream; don't leave the
+    // receiver behind on the application context.
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        unregisterPowerSaveReceiver()
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
+    private fun unregisterPowerSaveReceiver() {
+        powerSaveReceiver?.let { applicationContext.unregisterReceiver(it) }
+        powerSaveReceiver = null
     }
 
     // How Battery Saver treats location right now: one of

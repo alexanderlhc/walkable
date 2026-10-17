@@ -610,6 +610,56 @@ void main() {
   });
 
   testWidgets(
+      'shows a Battery Saver warning raised in the background on '
+      'returning to the app', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    // Battery Saver kicks in with the phone locked. A backgrounded app draws
+    // no frames, so the snackbar can't animate in and its timeout can't start:
+    // it waits for the walker instead of expiring unseen.
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    batterySaverCtrl.add(true);
+    await tester.pump();
+    await tester.pump();
+    await tester.pumpAndSettle(const Duration(seconds: 10));
+    expect(find.textContaining('Battery Saver turns off'), findsNothing);
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.textContaining('Battery Saver turns off'), findsOneWidget);
+  });
+
+  testWidgets(
+      'drops a background Battery Saver warning once it stopped '
+      'restricting', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    batterySaverCtrl.add(true);
+    await tester.pump();
+    batterySaverCtrl.add(false);
+    await tester.pumpAndSettle(const Duration(seconds: 10));
+
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+
+    expect(find.textContaining('Battery Saver turns off'), findsNothing);
+  });
+
+  testWidgets(
       'withdraws the Battery Saver notification once it stops '
       'restricting location', (tester) async {
     await tester.pumpWidget(await buildSubject());

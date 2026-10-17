@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:walkable/power_settings.dart';
 
 export 'package:geolocator/geolocator.dart' show Position;
 
@@ -127,7 +128,6 @@ typedef BatterySaverCheck = Future<bool> Function();
 /// mid-walk — switched on by hand, or automatically at low battery.
 typedef BatterySaverWatch = Stream<bool> Function();
 
-const _powerChannel = MethodChannel('walkable/power');
 const _powerSaveModeChannel =
     EventChannel('walkable/power/locationPowerSaveMode');
 
@@ -144,7 +144,7 @@ bool _restrictsLocation(int? mode) => mode == 1 || mode == 2 || mode == 4;
 Future<bool> defaultBatterySaverRestrictsLocation() async {
   if (defaultTargetPlatform != TargetPlatform.android) return false;
   try {
-    final mode = await _powerChannel.invokeMethod<int>('locationPowerSaveMode');
+    final mode = await powerChannel.invokeMethod<int>('locationPowerSaveMode');
     return _restrictsLocation(mode);
   } catch (e) {
     debugPrint('LocationService: battery saver check failed: $e');

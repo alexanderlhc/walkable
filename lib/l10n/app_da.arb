@@ -85,6 +85,6 @@
   "batterySaverNotificationTitle": "Batterisparefunktionen begrænser din gåtur",
   "settingsBackgroundTracking": "Sporing i baggrunden",
   "settingsBatterySaverSubtitle": "Batterisparefunktionen kan slå placering fra, når skærmen er låst.",
-  "settingsManufacturerHelp": "Hold gåture i gang",
+  "settingsManufacturerHelp": "Undgå at gåture stopper",
   "settingsManufacturerHelpSubtitle": "Din telefons egen batteristyring kan stoppe Walkable i baggrunden. dontkillmyapp.com viser, hvordan du forhindrer det."
 }
