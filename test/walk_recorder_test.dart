@@ -283,6 +283,22 @@ void main() {
     expect(recorder.state, RecorderState.stopped);
   });
 
+  test('a failed location shutdown still saves the walk', () async {
+    await recorder.start();
+    location.emit(_pos(55.676, 12.568));
+    location.emit(_pos(55.677, 12.569));
+    await Future<void>.delayed(Duration.zero);
+    clock.advance(const Duration(seconds: 30));
+    location.failStop = true;
+
+    final walk = await recorder.stop();
+
+    expect(recorder.state, RecorderState.stopped);
+    expect(walk, isNotNull);
+    expect(walk!.duration, const Duration(seconds: 30));
+    expect(walk.coordinates.length, 2);
+  });
+
   test('stop returns the saved walk hydrated with its coordinates', () async {
     await recorder.start();
     location.emit(_pos(55.676, 12.568));
@@ -975,8 +991,8 @@ void main() {
     });
 
     test(
-        'a failed location shutdown during the auto-stop still announces it '
-        'and leaves the recorder stopped', () {
+        'a failed location shutdown during the auto-stop still saves and '
+        'announces the walk', () {
       autoStopTest((h) {
         h.location.failStop = true;
         h.recorder.start(autoStopLimit: limit);
@@ -985,9 +1001,36 @@ void main() {
         h.record(limitTime);
 
         expect(h.recorder.state, RecorderState.stopped);
-        expect(h.autoStops, hasLength(1));
+        expect(h.autoStops.single.walk!.duration, limitTime);
         h.recorder.reset();
         expect(h.recorder.state, RecorderState.idle);
+      });
+    });
+
+    test('fixes arriving after the limit, before the tick, are not recorded',
+        () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopLimit: limit);
+        h.flush();
+        h.location.emit(_pos(55.676, 12.568));
+        h.location.emit(_pos(55.677, 12.569));
+        h.flush();
+        h.record(limitTime - const Duration(seconds: 1));
+
+        // The limit is crossed between ticks; a fix lands before the late
+        // tick notices.
+        h.clock.advance(const Duration(milliseconds: 1500));
+        h.location.emit(_pos(55.700, 12.600));
+        h.flush();
+        h.async.elapse(const Duration(seconds: 1));
+        h.flush();
+
+        final walk = h.autoStops.single.walk!;
+        expect(walk.duration, limitTime);
+        expect(walk.route, [
+          (lat: 55.676, lng: 12.568),
+          (lat: 55.677, lng: 12.569),
+        ]);
       });
     });
 

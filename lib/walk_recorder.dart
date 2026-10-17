@@ -251,16 +251,7 @@ class WalkRecorder {
     // The ticker only runs while recording, so the open period holds the
     // moment the limit was crossed.
     final endTime = _periodStart!.add(limit.duration - _accumulatedDuration);
-    // Nobody awaits an auto-stop, so a teardown failure that a manual stop()
-    // would rethrow to its caller must not escape here: the recorder is
-    // stopped either way, and the screen has to hear about it to leave the
-    // recording view.
-    Walk? walk;
-    try {
-      walk = await _stop(endTime: endTime);
-    } catch (e) {
-      debugPrint('WalkRecorder: auto-stop teardown failed: $e');
-    }
+    final walk = await _stop(endTime: endTime);
     if (!_autoStops.isClosed) {
       _autoStops.add(AutoStop(walk: walk, limit: limit));
     }
@@ -292,13 +283,16 @@ class WalkRecorder {
       _accumulatedDuration += end.difference(_periodStart!);
       _periodStart = null;
     }
+    // A failed shutdown must not cost the walk: it is over either way, so log
+    // and go on to save it (and so stop() never throws).
     try {
       await _subscription?.cancel();
-      _subscription = null;
       await locationService.stop();
-    } finally {
-      _state = RecorderState.stopped;
+    } catch (e) {
+      debugPrint('WalkRecorder: failed to stop location: $e');
     }
+    _subscription = null;
+    _state = RecorderState.stopped;
 
     _snapshots.add(_buildSnapshot(end));
 
@@ -361,6 +355,12 @@ class WalkRecorder {
   }
 
   void _onPosition(Position pos) {
+    // A fix that lands after the walk ended — during a stop's teardown, or
+    // past the auto-stop limit before the ticker notices — isn't part of it.
+    final limit = _autoStopLimit;
+    if (_stopping || (limit != null && _elapsedAt(_now()) >= limit.duration)) {
+      return;
+    }
     final coord = Coordinate(
       lat: pos.latitude,
       lng: pos.longitude,
