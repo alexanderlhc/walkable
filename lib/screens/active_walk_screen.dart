@@ -52,8 +52,8 @@ class ActiveWalkScreen extends StatefulWidget {
   State<ActiveWalkScreen> createState() => _ActiveWalkScreenState();
 }
 
-/// A finished walk the post-walk summary presents, with the auto-stop limit in
-/// force when it ended, in hours (null after a manual stop).
+/// A finished walk the post-walk summary presents, with the auto-stop that
+/// ended it (null after a manual stop) for the summary's note.
 typedef _CompletedWalk = ({Walk walk, AutoStop? autoStop});
 
 class _ActiveWalkScreenState extends State<ActiveWalkScreen> {

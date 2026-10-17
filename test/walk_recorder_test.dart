@@ -65,12 +65,15 @@ class _StubLocationService extends LocationService {
       onListen: () =>
           inner = _ctrl.stream.listen(ctrl.add, onError: ctrl.addError),
       onCancel: () async {
-        await inner.cancel();
+        await _cancelInner(inner);
         if (failCancel) throw StateError('position cancel rejected');
       },
     );
     return ctrl.stream;
   }
+
+  Future<void> _cancelInner(StreamSubscription<Position> inner) =>
+      inner.cancel();
 
   void emit(Position pos) => _ctrl.add(pos);
 
@@ -182,21 +185,11 @@ class _FlakyWalkRepository implements WalkRepository {
 /// A [_StubLocationService] whose position subscriptions cancel with a future
 /// from the current zone. A broadcast subscription's cancel() returns a
 /// root-zone future that fakeAsync can never flush, which would hang every
-/// awaited cancel in pause() and stop().
+/// awaited cancel in pause() and stop() — so the inner cancel isn't awaited.
 class _FakeAsyncLocationService extends _StubLocationService {
   @override
-  Stream<Position> get positions {
-    late StreamSubscription<Position> inner;
-    late final StreamController<Position> ctrl;
-    ctrl = StreamController<Position>(
-      onListen: () =>
-          inner = _ctrl.stream.listen(ctrl.add, onError: ctrl.addError),
-      onCancel: () async {
-        unawaited(inner.cancel());
-        if (failCancel) throw StateError('position cancel rejected');
-      },
-    );
-    return ctrl.stream;
+  Future<void> _cancelInner(StreamSubscription<Position> inner) async {
+    unawaited(inner.cancel());
   }
 }
 
@@ -1191,6 +1184,25 @@ void main() {
         expect(h.location.stopCalls, 1);
         expect(h.recorder.state, RecorderState.stopped);
         expect(h.autoStops.single.walk!.duration, limitTime);
+      });
+    });
+
+    test('an auto-stop whose cancel and location stop both fail logs each', () {
+      final logs = _captureDebugPrint();
+      autoStopTest((h) {
+        h.recorder.start(autoStopLimit: limit);
+        h.flush();
+        h.location.failCancel = true;
+        h.location.failStop = true;
+
+        h.record(limitTime);
+
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.autoStops.single.walk!.duration, limitTime);
+        expect(logs.where((l) => l.contains('position cancel rejected')),
+            hasLength(1));
+        expect(logs.where((l) => l.contains('location stop rejected')),
+            hasLength(1));
       });
     });
 
