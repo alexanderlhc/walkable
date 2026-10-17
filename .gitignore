@@ -136,3 +136,6 @@ README.md
 # Local fastlane install (bundle config path vendor/bundle)
 /android/vendor/
 /android/.bundle/
+
+# fastlane run output
+/android/fastlane/report.xml

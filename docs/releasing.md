@@ -10,28 +10,45 @@ committed for a release:
 
 ## Cut a release
 
-```sh
-git checkout main && git pull
-git tag v0.5.1
-git push origin v0.5.1          # → builds and uploads to the internal track
-```
+Production gets the exact build you tested on internal: it is promoted on
+Play, never rebuilt.
 
-Check the internal build on a phone (Play Console → Test and release →
-Testing → Internal testing). Then ship that tag to production:
+1. **Tag** the release. The push builds the tag and uploads it to the
+   internal track:
 
-- GitHub → Actions → Release → **Run workflow**
-- **Use workflow from:** Tags → `v0.5.1`, **Play Store track:** `production`
+   ```sh
+   git checkout main && git pull
+   git tag v0.5.1
+   git push origin v0.5.1
+   ```
 
-This builds the tag again with the next versionCode and uploads it to
-production. A run on a branch instead of a tag fails on purpose, so the
-version name always matches the code being built.
+2. **Test** the internal build on a phone (Play Console → Test and release →
+   Testing → Internal testing). Note its version code if more than one build
+   might be on internal.
 
-From a machine with the secrets, `cd android && bundle exec fastlane deploy track:internal`
-does the same as the workflow, for the tag on the checked-out commit.
+3. **Promote** it: GitHub → Actions → Release → **Run workflow**, with
+   **action:** `promote`. Leave **version code** empty to take the latest
+   build on internal. **Rollout** is the percentage of production users;
+   below 100 it is a staged rollout, and running promote again with a higher
+   number (or 100) widens or completes it.
+
+   Run it from `main` under "Use workflow from"; nothing is built, so it
+   doesn't need to be the tag.
+
+`action: build-internal` rebuilds a tag and uploads it to internal again (for
+example when the tag push's run failed); pick the tag under "Use workflow
+from". A run on a branch fails on purpose, so the version name always matches
+the code being built. Nothing in the workflow builds for production.
+
+From a machine with the secrets, in `android/`:
+
+- `bundle exec fastlane deploy` does step 1 for the tag on the checked-out commit.
+- `bundle exec fastlane promote [version_code:18] [rollout:20]` does step 3.
 
 ## One-time setup
 
 The workflow needs four repo secrets. A missing one fails the run at the first step.
+Promoting only needs `PLAY_STORE_JSON_KEY`.
 
 | Secret | Set by |
 | --- | --- |
