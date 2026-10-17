@@ -1,0 +1,86 @@
+name: Release
+
+# A pushed v* tag releases to the internal track. To ship to production, run
+# this workflow by hand on the tag ("Use workflow from" → the tag) and pick
+# production. See docs/releasing.md.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      track:
+        description: "Play Store track"
+        type: choice
+        options: [internal, production]
+        default: internal
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+          PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
+          CARTO_API_KEY: ${{ secrets.CARTO_API_KEY }}
+        run: |
+          missing=0
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEY_PROPERTIES PLAY_STORE_JSON_KEY CARTO_API_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repo secret $name is not set (just release-secrets / just carto-key)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Read Flutter version from .fvmrc
+        id: fvm
+        run: echo "flutter=$(jq -er .flutter .fvmrc)" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ steps.fvm.outputs.flutter }}
+          cache: true
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: android
+
+      - name: Materialize secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_PROPERTIES: ${{ secrets.ANDROID_KEY_PROPERTIES }}
+          PLAY_STORE_JSON_KEY_CONTENT: ${{ secrets.PLAY_STORE_JSON_KEY }}
+          CARTO_API_KEY: ${{ secrets.CARTO_API_KEY }}
+        run: |
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          printf '%s\n' "$ANDROID_KEY_PROPERTIES" > android/key.properties
+          printf '%s\n' "$PLAY_STORE_JSON_KEY_CONTENT" > "$RUNNER_TEMP/play-store-key.json"
+          # The Fastfile builds with --dart-define-from-file and refuses to run without it.
+          jq -n '{CARTO_API_KEY: env.CARTO_API_KEY}' > dart_defines.local.json
+
+      - name: Deploy
+        working-directory: android
+        env:
+          PLAY_STORE_JSON_KEY: ${{ runner.temp }}/play-store-key.json
+          TRACK: ${{ inputs.track || 'internal' }}
+        run: bundle exec fastlane deploy track:"$TRACK"
