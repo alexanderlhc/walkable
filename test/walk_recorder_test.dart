@@ -430,7 +430,11 @@ void main() {
     location.failStop = true;
 
     await recorder.pause();
-    await Future<void>.delayed(Duration.zero);
+    // The progress write is queued behind createWalk's real sqlite write, so a
+    // single event-loop turn isn't always enough (flaky under load).
+    while (flaky.updateProgressCalls.isEmpty) {
+      await Future<void>.delayed(Duration.zero);
+    }
 
     expect(recorder.state, RecorderState.paused);
     expect(flaky.updateProgressCalls, [const Duration(seconds: 20)]);
@@ -802,8 +806,11 @@ void main() {
       clock.advance(const Duration(seconds: 42));
 
       await recorder.pause();
-      // Let the serialized persistence chain run the write.
-      await Future<void>.delayed(Duration.zero);
+      // The progress write is queued behind createWalk's real sqlite write, so a
+      // single event-loop turn isn't always enough (flaky under load).
+      while (flaky.updateProgressCalls.isEmpty) {
+        await Future<void>.delayed(Duration.zero);
+      }
 
       expect(flaky.updateProgressCalls, [const Duration(seconds: 42)]);
     });
