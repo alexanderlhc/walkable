@@ -6,7 +6,9 @@ platform :android do
     track = options[:track] || "internal"
 
     Dir.chdir("../..") do
-      sh("flutter build appbundle --release")
+      # CARTO_API_KEY for the map tiles; `just carto-key` writes this file.
+      UI.user_error!("dart_defines.local.json missing: run `just carto-key` (the map would be blank)") unless File.exist?("dart_defines.local.json")
+      sh("flutter build appbundle --release --dart-define-from-file=dart_defines.local.json")
     end
 
     upload_to_play_store(

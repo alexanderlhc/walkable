@@ -77,8 +77,20 @@ class WalkStatusColors extends ThemeExtension<WalkStatusColors> {
 /// CartoDB raster tiles, label-free so the brand-coloured route stays the
 /// focus. Light uses the muted "voyager" style; dark uses "dark matter" so the
 /// map matches a dark device theme.
-String mapTileUrl(Brightness brightness) => brightness == Brightness.dark
-    ? 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_nolabels/{z}/{x}/{y}.png'
-    : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png';
+///
+/// CARTO requires an API key on every tile request. It is baked in at build
+/// time (`--dart-define-from-file=dart_defines.local.json`, see the justfile).
+/// A build without it (tests, a bare `flutter run`) still works, but CARTO
+/// answers with "API key required" watermark tiles instead of the map.
+String mapTileUrl(Brightness brightness, {String apiKey = cartoApiKey}) {
+  final style =
+      brightness == Brightness.dark ? 'dark_nolabels' : 'voyager_nolabels';
+  final url =
+      'https://{s}.basemaps.cartocdn.com/rastertiles/$style/{z}/{x}/{y}.png';
+  return apiKey.isEmpty ? url : '$url?key=${Uri.encodeQueryComponent(apiKey)}';
+}
+
+/// The CARTO basemaps API key from the build's dart-defines; empty if unset.
+const String cartoApiKey = String.fromEnvironment('CARTO_API_KEY');
 
 const List<String> mapTileSubdomains = ['a', 'b', 'c', 'd'];

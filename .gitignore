@@ -1,6 +1,9 @@
 # Google Play service account key (never commit)
 play-store-key.json
 
+# Build-time secrets (CARTO_API_KEY) for --dart-define-from-file (never commit)
+dart_defines.local.json
+
 # Miscellaneous
 *.class
 *.lock
