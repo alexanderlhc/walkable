@@ -15,7 +15,7 @@ on:
         options: [promote, build-internal]
         default: promote
       version_code:
-        description: "promote: version code to promote (empty = the latest on internal)"
+        description: "promote: version code to promote (empty = the latest on internal; set it when widening a staged rollout)"
         type: string
         required: false
       rollout:
@@ -92,7 +92,7 @@ jobs:
         working-directory: android
         env:
           PLAY_STORE_JSON_KEY: ${{ runner.temp }}/play-store-key.json
-        run: bundle exec fastlane deploy track:internal
+        run: bundle exec fastlane deploy
 
   # Copies a release from internal to production on Play: no Flutter build, no
   # keystore, only the Play service account.
@@ -104,10 +104,14 @@ jobs:
         env:
           PLAY_STORE_JSON_KEY: ${{ secrets.PLAY_STORE_JSON_KEY }}
         run: |
-          if [ -z "$PLAY_STORE_JSON_KEY" ]; then
-            echo "::error::Repo secret PLAY_STORE_JSON_KEY is not set (just release-secrets)"
-            exit 1
-          fi
+          missing=0
+          for name in PLAY_STORE_JSON_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Repo secret $name is not set (just release-secrets)"
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - uses: actions/checkout@v4
 

@@ -1,12 +1,14 @@
 default_platform(:android)
 
 platform :android do
-  desc "Build Flutter AAB and upload to Play Store (default: internal track)"
+  desc "Build Flutter AAB and upload it to the internal track. Production only"
+  desc "gets builds promoted from internal (lane promote), never fresh ones."
   desc "Version name comes from the git tag (v0.3.0 -> 0.3.0); version code is"
   desc "the highest code on Play (or in pubspec.yaml) + 1, so nothing is ever"
   desc "committed for a release."
   lane :deploy do |options|
-    track = options[:track] || "internal"
+    track = "internal"
+    UI.user_error!("deploy only uploads to internal; test the build there, then run lane promote") if options[:track] && options[:track] != track
 
     # The run must be for a tag (in CI: a push, or a manual run on a tag), so
     # the name always matches the code being built.
@@ -59,7 +61,8 @@ platform :android do
   desc "Promote a build from the internal track to production, without rebuilding,"
   desc "so production gets the exact binary tested on internal."
   desc "version_code: which build (default: the highest code on internal)."
-  desc "rollout: percentage of users (default 100). Run again with a higher one to widen a staged rollout."
+  desc "rollout: percentage of users (default 100). To widen a staged rollout, run"
+  desc "again with the same version_code and a higher rollout."
   lane :promote do |options|
     rollout = options[:rollout].to_s.strip.delete_suffix("%")
     rollout = "100" if rollout.empty?

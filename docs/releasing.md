@@ -29,8 +29,9 @@ Play, never rebuilt.
 3. **Promote** it: GitHub → Actions → Release → **Run workflow**, with
    **action:** `promote`. Leave **version code** empty to take the latest
    build on internal. **Rollout** is the percentage of production users;
-   below 100 it is a staged rollout, and running promote again with a higher
-   number (or 100) widens or completes it.
+   below 100 it is a staged rollout. To widen or complete it, run promote
+   again with the **same version code** and a higher number (or 100); left
+   empty, it would take whatever is newest on internal by then.
 
    Run it from `main` under "Use workflow from"; nothing is built, so it
    doesn't need to be the tag.
