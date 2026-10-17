@@ -316,7 +316,7 @@ void main() {
   });
 
   tearDown(() async {
-    recorder.dispose();
+    await recorder.dispose();
     location.dispose();
     await repository.close();
   });
@@ -824,6 +824,132 @@ void main() {
       expect(walks.single.distanceMetres, greaterThan(0));
       final full = await repository.findById(walks.single.id);
       expect(full!.coordinates, isEmpty);
+    });
+  });
+
+  group('dispose mid-walk', () {
+    test('dispose while recording stops location', () async {
+      await recorder.start();
+
+      await recorder.dispose();
+
+      expect(location.stopCalls, 1);
+    });
+
+    test('dispose while paused stops location', () async {
+      await recorder.start();
+      await recorder.pause();
+      final stopsBefore = location.stopCalls;
+
+      await recorder.dispose();
+
+      expect(location.stopCalls, stopsBefore + 1);
+    });
+
+    test('a failed subscription cancel on dispose still stops location',
+        () async {
+      await recorder.start();
+      location.failCancel = true;
+
+      await recorder.dispose();
+
+      expect(location.stopCalls, 1);
+    });
+
+    test('a dispose whose cancel and location stop both fail logs each',
+        () async {
+      final logs = _captureDebugPrint();
+      await recorder.start();
+      location.failCancel = true;
+      location.failStop = true;
+
+      await recorder.dispose();
+
+      expect(logs.where((l) => l.contains('position cancel rejected')),
+          hasLength(1));
+      expect(logs.where((l) => l.contains('location stop rejected')),
+          hasLength(1));
+    });
+
+    test(
+        'crash recovery salvages a walk disposed mid-recording with its '
+        'pause-aware moving time', () async {
+      await recorder.start();
+      location.emit(_pos(55.676, 12.568));
+      location.emit(_pos(55.677, 12.568));
+      await Future<void>.delayed(Duration.zero);
+      clock.advance(const Duration(seconds: 20));
+      await recorder.pause();
+      clock.advance(const Duration(minutes: 5)); // paused: doesn't count
+      await recorder.resume();
+      clock.advance(const Duration(seconds: 10));
+
+      await recorder.dispose();
+
+      // The walk is left unfinished for startup recovery, not saved as done.
+      expect(await repository.recoverOrphans(), 1);
+      final walks = await repository.findAll();
+      expect(walks.single.duration, const Duration(seconds: 30));
+    });
+
+    test('dispose during start() stops the location it was starting', () async {
+      location.startGate = Completer<void>();
+      final starting = recorder.start();
+
+      final disposing = recorder.dispose();
+      location.startGate!.complete();
+      await starting;
+      await disposing;
+
+      expect(location.stopCalls, 1);
+      expect(recorder.state, isNot(RecorderState.recording));
+    });
+
+    test('dispose during resume() stops the location it restarted', () async {
+      await recorder.start();
+      await recorder.pause();
+      location.startGate = Completer<void>();
+      final resuming = recorder.resume();
+
+      final disposing = recorder.dispose();
+      location.startGate!.complete();
+      await resuming;
+      await disposing;
+
+      // Pause, dispose, then the stop for resume()'s late start.
+      expect(location.stopCalls, 3);
+      expect(recorder.state, isNot(RecorderState.recording));
+    });
+
+    test('dispose during a stop lets the stop finish and save the walk',
+        () async {
+      await recorder.start();
+      location.stopGate = Completer<void>();
+      final stopping = recorder.stop();
+
+      await recorder.dispose();
+      location.stopGate!.complete();
+
+      expect(await stopping, isNotNull);
+    });
+
+    test('dispose during a pause lets the pause finish', () async {
+      await recorder.start();
+      location.stopGate = Completer<void>();
+      final pausing = recorder.pause();
+
+      final disposing = recorder.dispose();
+      location.stopGate!.complete();
+      await pausing;
+      await disposing;
+
+      expect(recorder.state, isNot(RecorderState.recording));
+    });
+
+    test('dispose with no walk in progress leaves location alone', () async {
+      await recorder.dispose();
+
+      expect(location.stopCalls, 0);
     });
   });
 
@@ -1495,6 +1621,18 @@ void main() {
           h.record(limitTime);
           expect(
               h.alerts.calls, ['showWarning', 'cancelWarning', 'showWarning']);
+        });
+      });
+
+      test('dispose during the warning cancels it', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.dispose();
+          h.flush();
+          expect(h.alerts.calls, ['showWarning', 'cancelWarning']);
         });
       });
 
