@@ -12,7 +12,9 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace 'dk.alexanderlhc.walkable'
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler_android 14 compiles against 37; follow Flutter's
+    // default once it passes that. targetSdk stays at Flutter's default.
+    compileSdk = Math.max(37, flutter.compileSdkVersion)
     ndkVersion = flutter.ndkVersion
 
     defaultConfig {

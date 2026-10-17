@@ -16,8 +16,11 @@ abstract interface class GeolocatorInterface {
 
 /// Decides whether a runtime permission should be (re-)requested given its
 /// current [PermissionStatus]. This is where per-permission policy varies:
-/// notification only re-requests while explicitly denied (a permanent denial
-/// can't be re-prompted), whereas the others request whenever not yet granted.
+/// notification only re-requests while explicitly denied, whereas the others
+/// request whenever not yet granted. On Android, [Permission.status] never
+/// reports `permanentlyDenied` (permission_handler 13+), so a permanently
+/// denied notification permission still reaches `request()`, which Android
+/// resolves at once without showing a dialog.
 typedef ShouldRequest = bool Function(PermissionStatus status);
 
 /// Gate run immediately before an OS location-permission prompt. Returns
