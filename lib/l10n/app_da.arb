@@ -72,5 +72,10 @@
   "autoStopWarningTitle": "Går du stadig?",
   "autoStopWarningCountdown": "Din gåtur stopper om {time}",
   "actionKeepWalking": "Fortsæt",
-  "actionStopNow": "Stop nu"
+  "actionStopNow": "Stop nu",
+  "autoStopChannelName": "Advarsler om automatisk stop",
+  "autoStopChannelDescription": "Advarer, før en gåtur stopper af sig selv, og fortæller dig, når den er stoppet.",
+  "autoStopWarningBody": "{minutes, plural, =1{Din gåtur stopper om 1 minut.} other{Din gåtur stopper om {minutes} minutter.}}",
+  "autoStopNoticeTitle": "Gåtur stoppet og gemt",
+  "autoStopNoticeBody": "Åbn Walkable for at se din gåtur."
 }

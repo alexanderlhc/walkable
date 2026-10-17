@@ -4,6 +4,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:walkable/auto_stop.dart';
+import 'package:walkable/auto_stop_alerts.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -181,16 +182,40 @@ class _FakeAsyncLocationService extends _StubLocationService {
   }
 }
 
+/// Records every call the recorder makes on its auto-stop alerts port, in
+/// order. Can be told to throw, as a broken notification plugin might.
+class _FakeAutoStopAlerts implements AutoStopAlerts {
+  final List<String> calls = [];
+  bool fail = false;
+
+  Future<void> _record(String call) async {
+    calls.add(call);
+    if (fail) throw StateError('$call rejected');
+  }
+
+  @override
+  Future<void> showWarning() => _record('showWarning');
+
+  @override
+  Future<void> cancelWarning() => _record('cancelWarning');
+
+  @override
+  Future<void> showStoppedNotice() => _record('showStoppedNotice');
+}
+
 /// One fakeAsync auto-stop scenario: a recorder on the fake clock with the
-/// no-op flaky repository, plus every auto-stop event it emits.
+/// no-op flaky repository and the fake alerts port, plus every auto-stop
+/// event it emits.
 class _AutoStopHarness {
   final FakeAsync async;
   final location = _FakeAsyncLocationService();
   final clock = _FakeClock();
   final flaky = _FlakyWalkRepository();
+  final alerts = _FakeAutoStopAlerts();
   late final WalkRecorder recorder = WalkRecorder(
     locationService: location,
     repository: flaky,
+    alerts: alerts,
     now: clock.now,
   );
   final List<AutoStop> autoStops = [];
@@ -1304,6 +1329,157 @@ void main() {
 
           expect(h.snapshots.last.signalLost, isTrue);
           expect(h.autoStopIn, grace);
+        });
+      });
+    });
+
+    group('alerts', () {
+      const grace = Duration(minutes: 5);
+
+      test('the warning is shown once, when it activates', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+
+          h.record(limitTime - grace - const Duration(seconds: 1));
+          expect(h.alerts.calls, isEmpty);
+
+          h.record(const Duration(minutes: 2));
+          expect(h.alerts.calls, ['showWarning']);
+        });
+      });
+
+      test('keep walking cancels the warning; the next one is shown later', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.keepWalking();
+          h.flush();
+          expect(h.alerts.calls, ['showWarning', 'cancelWarning']);
+
+          h.record(limitTime);
+          expect(
+              h.alerts.calls, ['showWarning', 'cancelWarning', 'showWarning']);
+        });
+      });
+
+      test('a manual stop during the warning cancels it, with no notice', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.stop();
+          h.flush();
+
+          expect(h.alerts.calls, ['showWarning', 'cancelWarning']);
+        });
+      });
+
+      test('a manual stop with no warning up alerts nothing', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(const Duration(minutes: 10));
+
+          h.recorder.stop();
+          h.flush();
+
+          expect(h.alerts.calls, isEmpty);
+        });
+      });
+
+      test('a pause during the warning cancels it; resuming shows it again',
+          () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.pause();
+          h.flush();
+          expect(h.alerts.calls, ['showWarning', 'cancelWarning']);
+
+          h.recorder.resume();
+          h.flush();
+          h.record(const Duration(seconds: 1));
+          expect(
+              h.alerts.calls, ['showWarning', 'cancelWarning', 'showWarning']);
+        });
+      });
+
+      test(
+          'reaching the limit cancels the warning and shows the notice before '
+          'announcing the stop', () {
+        autoStopTest((h) {
+          final callsAtEvent = <List<String>>[];
+          final sub = h.recorder.autoStops
+              .listen((_) => callsAtEvent.add([...h.alerts.calls]));
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+
+          h.record(limitTime);
+
+          const expected = [
+            'showWarning',
+            'cancelWarning',
+            'showStoppedNotice'
+          ];
+          expect(h.alerts.calls, expected);
+          expect(callsAtEvent, [expected]);
+          sub.cancel();
+        });
+      });
+
+      test('stop now cancels the warning and shows the notice', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.stopNow();
+          h.flush();
+
+          expect(h.alerts.calls,
+              ['showWarning', 'cancelWarning', 'showStoppedNotice']);
+        });
+      });
+
+      test(
+          'a self-stop whose save failed shows no "saved" notice, and the '
+          'recorder is still reusable', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.flaky.failFinishWalk = true;
+
+          h.record(limitTime);
+
+          expect(h.recorder.state, RecorderState.stopped);
+          expect(h.autoStops.single.walk, isNull);
+          expect(h.alerts.calls, ['showWarning', 'cancelWarning']);
+
+          h.recorder.reset();
+          expect(h.recorder.state, RecorderState.idle);
+        });
+      });
+
+      test('failing alerts disturb neither the warning nor the stop', () {
+        autoStopTest((h) {
+          h.alerts.fail = true;
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+
+          h.record(limitTime - grace);
+          expect(h.autoStopIn, grace);
+
+          h.record(grace);
+          expect(h.recorder.state, RecorderState.stopped);
+          expect(h.autoStops.single.walk!.duration, limitTime);
+          expect(h.alerts.calls,
+              ['showWarning', 'cancelWarning', 'showStoppedNotice']);
         });
       });
     });

@@ -268,4 +268,28 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get actionStopNow => 'Stop nu';
+
+  @override
+  String get autoStopChannelName => 'Advarsler om automatisk stop';
+
+  @override
+  String get autoStopChannelDescription =>
+      'Advarer, før en gåtur stopper af sig selv, og fortæller dig, når den er stoppet.';
+
+  @override
+  String autoStopWarningBody(int minutes) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: 'Din gåtur stopper om $minutes minutter.',
+      one: 'Din gåtur stopper om 1 minut.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get autoStopNoticeTitle => 'Gåtur stoppet og gemt';
+
+  @override
+  String get autoStopNoticeBody => 'Åbn Walkable for at se din gåtur.';
 }

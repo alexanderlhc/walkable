@@ -535,6 +535,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stop now'**
   String get actionStopNow;
+
+  /// Android notification channel name, shown in the system's notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-stop warnings'**
+  String get autoStopChannelName;
+
+  /// No description provided for @autoStopChannelDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Warns before a walk stops itself, and tells you when it has.'**
+  String get autoStopChannelDescription;
+
+  /// Auto-stop warning notification text, under autoStopWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes, plural, =1{Your walk will stop in 1 minute.} other{Your walk will stop in {minutes} minutes.}}'**
+  String autoStopWarningBody(int minutes);
+
+  /// No description provided for @autoStopNoticeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Walk stopped and saved'**
+  String get autoStopNoticeTitle;
+
+  /// No description provided for @autoStopNoticeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Walkable to see your walk.'**
+  String get autoStopNoticeBody;
 }
 
 class _AppLocalizationsDelegate

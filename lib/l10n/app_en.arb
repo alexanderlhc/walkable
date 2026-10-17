@@ -120,5 +120,19 @@
     }
   },
   "actionKeepWalking": "Keep walking",
-  "actionStopNow": "Stop now"
+  "actionStopNow": "Stop now",
+  "autoStopChannelName": "Auto-stop warnings",
+  "@autoStopChannelName": {
+    "description": "Android notification channel name, shown in the system's notification settings."
+  },
+  "autoStopChannelDescription": "Warns before a walk stops itself, and tells you when it has.",
+  "autoStopWarningBody": "{minutes, plural, =1{Your walk will stop in 1 minute.} other{Your walk will stop in {minutes} minutes.}}",
+  "@autoStopWarningBody": {
+    "description": "Auto-stop warning notification text, under autoStopWarningTitle.",
+    "placeholders": {
+      "minutes": { "type": "int" }
+    }
+  },
+  "autoStopNoticeTitle": "Walk stopped and saved",
+  "autoStopNoticeBody": "Open Walkable to see your walk."
 }

@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:walkable/auto_stop_alerts.dart';
+import 'package:walkable/auto_stop_notifications.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
@@ -39,20 +41,44 @@ void main() async {
   } catch (e) {
     debugPrint('main: orphaned-walk recovery failed: $e');
   }
-  final locationService = LocationService();
-  final recorder = WalkRecorder(
-    locationService: locationService,
-    repository: repository,
-  );
   final prefs = await SharedPreferences.getInstance();
   final settingsController = SettingsController(SettingsRepository(prefs))
     ..load();
+  final locationService = LocationService();
+  // System notifications are Android-only; the desktop builds used for
+  // development go without.
+  final notifications = defaultTargetPlatform == TargetPlatform.android
+      ? AutoStopNotifications(
+          localizations: () => lookupAppLocalizations(
+              settingsController.localeOverride ??
+                  resolveAppLocale(PlatformDispatcher.instance.locale)),
+        )
+      : null;
+  final recorder = WalkRecorder(
+    locationService: locationService,
+    repository: repository,
+    alerts: notifications ?? const NoAutoStopAlerts(),
+  );
+  await notifications?.initialize(
+    onKeepWalking: recorder.keepWalking,
+    onStopNow: recorder.stopNow,
+  );
   runApp(WalkableApp(
     recorder: recorder,
     repository: repository,
     settingsController: settingsController,
     recoveredWalkCount: recoveredWalks,
   ));
+}
+
+/// The supported locale matching the device language. Anything we don't
+/// translate falls back to English, rather than to the first supported
+/// locale, which is Danish.
+Locale resolveAppLocale(Locale? deviceLocale) {
+  for (final locale in AppLocalizations.supportedLocales) {
+    if (locale.languageCode == deviceLocale?.languageCode) return locale;
+  }
+  return const Locale('en');
 }
 
 class WalkableApp extends StatelessWidget {
@@ -87,17 +113,9 @@ class WalkableApp extends StatelessWidget {
         locale: settingsController.localeOverride,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        // Match the device language; fall back to English for anything we
-        // don't translate (rather than the first supported locale, which is
-        // Danish).
-        localeResolutionCallback: (deviceLocale, supportedLocales) {
-          for (final locale in supportedLocales) {
-            if (locale.languageCode == deviceLocale?.languageCode) {
-              return locale;
-            }
-          }
-          return const Locale('en');
-        },
+        // Match the device language, falling back to English.
+        localeResolutionCallback: (deviceLocale, _) =>
+            resolveAppLocale(deviceLocale),
         onGenerateRoute: (settings) {
           if (settings.name == '/walk-detail') {
             final walk = settings.arguments as Walk;
