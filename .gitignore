@@ -131,7 +131,6 @@ app.*.symbols
 .idea/
 *.iml
 .metadata
-README.md
 
 # Local fastlane install (bundle config path vendor/bundle)
 /android/vendor/
