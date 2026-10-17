@@ -117,15 +117,13 @@ class AppLocalizationsDa extends AppLocalizations {
   String get foregroundDisclosureTitle => 'Adgang til placering';
 
   @override
-  String get foregroundDisclosureBody =>
-      'Walkable indsamler placeringsdata for at vise din position på kortet og registrere din gårute, mens du bruger appen. Dine placeringsdata forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade adgang til placering.';
+  String get foregroundDisclosureBody => 'Walkable indsamler placeringsdata for at vise din position på kortet og registrere din gårute, mens du bruger appen. Din placering sendes aldrig nogen steder hen; kun kortet for det viste område hentes fra kortudbyderen CARTO.\n\nDernæst beder Android dig om at tillade adgang til placering.';
 
   @override
   String get locationDisclosureTitle => 'Tillad placering i baggrunden';
 
   @override
-  String get locationDisclosureBody =>
-      'Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og forlader aldrig din enhed.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.';
+  String get locationDisclosureBody => 'Walkable indsamler placeringsdata for at registrere din gårute og vise din position på kortet – også i baggrunden, selv når appen er lukket eller skærmen er slukket. Det holder din gåtur i gang, mens telefonen ligger i lommen. Din placering bruges kun, mens en gåtur registreres, og sendes aldrig nogen steder hen; kun kortet for det viste område hentes fra CARTO.\n\nDernæst beder Android dig om at tillade placering “Hele tiden”.';
 
   @override
   String get locationDisclosureAccept => 'Fortsæt';
@@ -134,23 +132,19 @@ class AppLocalizationsDa extends AppLocalizations {
   String get locationDisclosureDecline => 'Ikke nu';
 
   @override
-  String get backgroundTrackingWarning =>
-      'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
+  String get backgroundTrackingWarning => 'Notifikationer er slået fra, så din gåtur kan stoppe med at blive registreret, når skærmen er låst.';
 
   @override
-  String get batteryOptimizationWarning =>
-      'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
+  String get batteryOptimizationWarning => 'Batterioptimiering er slået til, så din gåtur kan stoppe med at blive registreret, når skærmen er låst. Slå det fra i Indstillinger.';
 
   @override
-  String get batterySaverLocationWarning =>
-      'Batterisparefunktionen slår placering fra, når skærmen er låst, så din gåtur kan få huller. Slå batterisparefunktionen fra, eller hold skærmen tændt.';
+  String get batterySaverLocationWarning => 'Batterisparefunktionen slår placering fra, når skærmen er låst, så din gåtur kan få huller. Slå batterisparefunktionen fra, eller hold skærmen tændt.';
 
   @override
   String get leaveWalkTitle => 'Gåtur i gang';
 
   @override
-  String get leaveWalkBody =>
-      'Din gåtur bliver stadig optaget. Vil du fortsætte, eller stoppe og gemme den?';
+  String get leaveWalkBody => 'Din gåtur bliver stadig optaget. Vil du fortsætte, eller stoppe og gemme den?';
 
   @override
   String get leaveWalkKeepRecording => 'Fortsæt optagelse';

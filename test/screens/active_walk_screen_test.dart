@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
+import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -119,6 +120,44 @@ void main() {
 
     expect(find.text('Tidligere gåture'), findsOneWidget);
   });
+
+  // ─── map attribution ─────────────────────────────────────────────────────────
+
+  testWidgets('map credits OpenStreetMap and CARTO', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+          of: find.byType(FlutterMap), matching: find.byType(MapAttribution)),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('OpenStreetMap contributors, © CARTO',
+          findRichText: true),
+      findsOneWidget,
+    );
+  });
+
+  for (final recording in [false, true]) {
+    testWidgets(
+        'map credit sits clear of the bottom panel and the menu chip '
+        '(${recording ? 'recording' : 'idle'})', (tester) async {
+      await tester.pumpWidget(await buildSubject());
+      await tester.pumpAndSettle();
+      if (recording) {
+        await tester.tap(find.byKey(const Key('start_button')));
+        await tester.pumpAndSettle();
+      }
+
+      final credit = tester.getRect(find
+          .textContaining('OpenStreetMap contributors', findRichText: true));
+      final panel = tester.getRect(find.byType(BackdropFilter));
+      final menu = tester.getRect(find.byKey(const Key('menu_button')));
+      expect(credit.bottom, lessThanOrEqualTo(panel.top));
+      expect(credit.overlaps(menu), isFalse);
+    });
+  }
 
   // ─── idle state ────────────────────────────────────────────────────────────
 

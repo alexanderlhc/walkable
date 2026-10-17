@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:walkable/l10n/app_localizations.dart';
+import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/walk_repository.dart';
 import 'package:walkable/settings_controller.dart';
@@ -295,6 +296,7 @@ class _MiniRouteMap extends StatelessWidget {
               ),
             ],
           ),
+          const CompactMapAttribution(),
         ],
       ),
     );
