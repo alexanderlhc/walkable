@@ -98,6 +98,11 @@ class WalkRecorder {
   // reset() — can finalize the walk twice or clear it mid-save.
   bool _stopping = false;
 
+  // Set once dispose() begins. start() and resume() check it after their
+  // async gap: a location start that finishes after dispose stopped location
+  // must be stopped again rather than recorded on.
+  bool _disposed = false;
+
   String? _id;
   DateTime? _startTime;
   DateTime? _periodStart;
@@ -153,7 +158,7 @@ class WalkRecorder {
     LocationConsent? backgroundConsent,
     AutoStopLimit? autoStopLimit,
   }) async {
-    if (_starting || _state != RecorderState.idle) {
+    if (_disposed || _starting || _state != RecorderState.idle) {
       return LocationServiceResult.running;
     }
     _starting = true;
@@ -164,6 +169,10 @@ class WalkRecorder {
         foregroundConsent: foregroundConsent,
         backgroundConsent: backgroundConsent,
       );
+      if (_disposed) {
+        await _stopLocation();
+        return LocationServiceResult.running;
+      }
       if (result == LocationServiceResult.permissionDenied) {
         // Stay idle so the user can try again after granting permission.
         return LocationServiceResult.permissionDenied;
@@ -194,8 +203,7 @@ class WalkRecorder {
   Future<void> pause() async {
     if (_stopping || _state != RecorderState.recording) return;
     final now = _now();
-    _accumulatedDuration += now.difference(_periodStart!);
-    _periodStart = null;
+    _freezeMovingTime(now);
     _signalLost = false;
     // Paused time doesn't count, so the warning waits too; the first tick
     // after a resume inside the window raises it again.
@@ -211,7 +219,7 @@ class WalkRecorder {
     // is what keeps a later crash recovery honest.
     _lastProgressPersist = now;
     _persistProgress(now);
-    _snapshots.add(_buildSnapshot(now));
+    _emitSnapshot(now);
   }
 
   /// [foregroundConsent] gates the OS foreground-location prompt in the rare
@@ -225,6 +233,10 @@ class WalkRecorder {
         notification: _notification,
         foregroundConsent: foregroundConsent,
       );
+      if (_disposed) {
+        await _stopLocation();
+        return;
+      }
       if (result == LocationServiceResult.permissionDenied) {
         // Stay paused: entering recording without a position stream would show
         // a counting timer while zero coordinates are captured.
@@ -256,7 +268,7 @@ class WalkRecorder {
         }
         if (elapsed >= stopAt - autoStopGrace) _setAutoStopWarning(true);
       }
-      _snapshots.add(_buildSnapshot(now));
+      _emitSnapshot(now);
       final lastPersist = _lastProgressPersist;
       if (lastPersist == null ||
           now.difference(lastPersist) >= progressPersistInterval) {
@@ -295,7 +307,7 @@ class WalkRecorder {
     if (!_autoStopWarning || _stopping) return;
     _autoStopPeriods++;
     _setAutoStopWarning(false);
-    _snapshots.add(_buildSnapshot(_now()));
+    _emitSnapshot(_now());
   }
 
   /// While the auto-stop warning is active, stops the walk now through the
@@ -354,16 +366,13 @@ class WalkRecorder {
     _setAutoStopWarning(false);
     // Freeze moving time at [end] before the async teardown below: the walk
     // ended then, however long the teardown takes.
-    if (_periodStart != null) {
-      _accumulatedDuration += end.difference(_periodStart!);
-      _periodStart = null;
-    }
+    _freezeMovingTime(end);
     // A failed shutdown must not cost the walk: it is over either way, so log
     // and go on to save it (and so stop() never throws).
     await _stopLocation();
     _state = RecorderState.stopped;
 
-    _snapshots.add(_buildSnapshot(end));
+    _emitSnapshot(end);
 
     // Drain pending coordinate writes, then mark the walk finished with the
     // canonical pause-aware moving time, the total route distance, and the
@@ -415,9 +424,7 @@ class WalkRecorder {
     _persist = Future<void>.value();
     // Emit a cleared snapshot so listeners drop the finished walk's polyline
     // instead of rendering it on the idle map (and into the next walk).
-    if (!_snapshots.isClosed) {
-      _snapshots.add(_buildSnapshot(_now()));
-    }
+    _emitSnapshot(_now());
   }
 
   /// Ends the recorder for good. A walk still recording or paused is not
@@ -430,6 +437,7 @@ class WalkRecorder {
   /// returned future completes once location is stopped and every pending
   /// write is drained.
   Future<void> dispose() async {
+    _disposed = true;
     _ticker?.cancel();
     _ticker = null;
     if (!_stopping &&
@@ -437,10 +445,7 @@ class WalkRecorder {
       // Its "stop now" action would have no walk left to stop.
       _setAutoStopWarning(false);
       final now = _now();
-      if (_periodStart != null) {
-        _accumulatedDuration += now.difference(_periodStart!);
-        _periodStart = null;
-      }
+      _freezeMovingTime(now);
       _persistProgress(now);
       // Not a finished walk, but a disposed recorder must ignore any later
       // pause/resume/stop rather than act on a walk it no longer owns.
@@ -463,7 +468,7 @@ class WalkRecorder {
     debugPrint('WalkRecorder: position stream error: $error');
     if (_state != RecorderState.recording || _signalLost) return;
     _signalLost = true;
-    _snapshots.add(_buildSnapshot(_now()));
+    _emitSnapshot(_now());
   }
 
   void _onPosition(Position pos) {
@@ -481,7 +486,7 @@ class WalkRecorder {
     final index = _coordinates.length;
     _coordinates.add(coord);
     _signalLost = false;
-    _snapshots.add(_buildSnapshot(_now()));
+    _emitSnapshot(_now());
 
     // Persist this point immediately, serialized after earlier writes.
     // Best-effort: a write failure mustn't kill recording, and the point is
@@ -523,11 +528,24 @@ class WalkRecorder {
     }));
   }
 
+  /// Closes the open recording period at [at], folding it into the
+  /// accumulated moving time. A no-op while paused.
+  void _freezeMovingTime(DateTime at) {
+    _accumulatedDuration = _elapsedAt(at);
+    _periodStart = null;
+  }
+
   /// Pause-aware moving time up to [now]: accumulated time plus the open
   /// recording period, or just the accumulated time while paused.
   Duration _elapsedAt(DateTime now) => _periodStart != null
       ? _accumulatedDuration + now.difference(_periodStart!)
       : _accumulatedDuration;
+
+  /// Emits the snapshot as of [now]. A no-op once dispose() closed the
+  /// stream: a pause or stop it interrupted still finishes its own work.
+  void _emitSnapshot(DateTime now) {
+    if (!_snapshots.isClosed) _snapshots.add(_buildSnapshot(now));
+  }
 
   WalkSnapshot _buildSnapshot(DateTime now) {
     final polyline = _coordinates.map((c) => (lat: c.lat, lng: c.lng)).toList();

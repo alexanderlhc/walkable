@@ -827,9 +827,6 @@ void main() {
     });
   });
 
-  // The pause-aware duration exists only in the recorder's memory; these
-  // periodic writes are what crash recovery falls back on. See
-  // WalkRepository.recoverOrphans.
   group('dispose mid-walk', () {
     test('dispose while recording stops location', () async {
       await recorder.start();
@@ -874,7 +871,8 @@ void main() {
           hasLength(1));
     });
 
-    test('crash recovery salvages a walk disposed mid-recording with its '
+    test(
+        'crash recovery salvages a walk disposed mid-recording with its '
         'pause-aware moving time', () async {
       await recorder.start();
       location.emit(_pos(55.676, 12.568));
@@ -894,6 +892,60 @@ void main() {
       expect(walks.single.duration, const Duration(seconds: 30));
     });
 
+    test('dispose during start() stops the location it was starting', () async {
+      location.startGate = Completer<void>();
+      final starting = recorder.start();
+
+      final disposing = recorder.dispose();
+      location.startGate!.complete();
+      await starting;
+      await disposing;
+
+      expect(location.stopCalls, 1);
+      expect(recorder.state, isNot(RecorderState.recording));
+    });
+
+    test('dispose during resume() stops the location it restarted', () async {
+      await recorder.start();
+      await recorder.pause();
+      location.startGate = Completer<void>();
+      final resuming = recorder.resume();
+
+      final disposing = recorder.dispose();
+      location.startGate!.complete();
+      await resuming;
+      await disposing;
+
+      // Pause, dispose, then the stop for resume()'s late start.
+      expect(location.stopCalls, 3);
+      expect(recorder.state, isNot(RecorderState.recording));
+    });
+
+    test('dispose during a stop lets the stop finish and save the walk',
+        () async {
+      await recorder.start();
+      location.stopGate = Completer<void>();
+      final stopping = recorder.stop();
+
+      await recorder.dispose();
+      location.stopGate!.complete();
+
+      expect(await stopping, isNotNull);
+    });
+
+    test('dispose during a pause lets the pause finish', () async {
+      await recorder.start();
+      location.stopGate = Completer<void>();
+      final pausing = recorder.pause();
+
+      final disposing = recorder.dispose();
+      location.stopGate!.complete();
+      await pausing;
+      await disposing;
+
+      expect(recorder.state, isNot(RecorderState.recording));
+    });
+
     test('dispose with no walk in progress leaves location alone', () async {
       await recorder.dispose();
 
@@ -901,6 +953,9 @@ void main() {
     });
   });
 
+  // The pause-aware duration exists only in the recorder's memory; these
+  // periodic writes are what crash recovery falls back on. See
+  // WalkRepository.recoverOrphans.
   group('progress persistence', () {
     test('ticker writes progress once per 30 s of recording, not per tick', () {
       fakeAsync((async) {
