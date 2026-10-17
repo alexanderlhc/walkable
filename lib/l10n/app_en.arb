@@ -96,5 +96,19 @@
       "version": { "type": "String" },
       "build": { "type": "String" }
     }
+  },
+  "settingsAutoStop": "Auto-stop walk",
+  "autoStopOff": "Off",
+  "autoStopAfterHours": "{hours, plural, =1{After 1 hour} other{After {hours} hours}}",
+  "@autoStopAfterHours": {
+    "placeholders": {
+      "hours": { "type": "int" }
+    }
+  },
+  "walkAutoStoppedNote": "{hours, plural, =1{Walk stopped automatically after 1 hour} other{Walk stopped automatically after {hours} hours}}",
+  "@walkAutoStoppedNote": {
+    "placeholders": {
+      "hours": { "type": "int" }
+    }
   }
 }

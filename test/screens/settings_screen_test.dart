@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/screens/settings_screen.dart';
@@ -233,6 +234,91 @@ void main() {
     expect(find.text('Enheder'), findsOneWidget);
     expect(find.text('Kilometer'), findsOneWidget);
     expect(find.text('Miles'), findsOneWidget);
+  });
+
+  testWidgets('shows auto-stop section with Off and the three limits',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Auto-stop walk'), findsOneWidget);
+    expect(find.text('Off'), findsOneWidget);
+    expect(find.text('After 1 hour'), findsOneWidget);
+    expect(find.text('After 2 hours'), findsOneWidget);
+    expect(find.text('After 4 hours'), findsOneWidget);
+  });
+
+  testWidgets('Off is selected when nothing is stored', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    // The section sits below the fold; ListView builds it lazily.
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    final group = tester.widget<RadioGroup<AutoStopLimit?>>(
+        find.byType(RadioGroup<AutoStopLimit?>));
+    expect(group.groupValue, isNull);
+  });
+
+  testWidgets('persisted auto-stop limit is the selected radio',
+      (tester) async {
+    await setUpController({'auto_stop_limit': 'twoHours'});
+    await tester.pumpWidget(buildSubject());
+    // The section sits below the fold; ListView builds it lazily.
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    final group = tester.widget<RadioGroup<AutoStopLimit?>>(
+        find.byType(RadioGroup<AutoStopLimit?>));
+    expect(group.groupValue, AutoStopLimit.twoHours);
+  });
+
+  testWidgets('tapping After 2 hours updates the controller and persists',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_2h')), 500);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('auto_stop_2h')));
+    await tester.pumpAndSettle();
+
+    expect(controller.autoStopLimit, AutoStopLimit.twoHours);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('auto_stop_limit'), 'twoHours');
+  });
+
+  testWidgets('tapping Off removes the stored auto-stop limit', (tester) async {
+    await setUpController({'auto_stop_limit': 'oneHour'});
+    await tester.pumpWidget(buildSubject());
+
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('auto_stop_off')), 500);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('auto_stop_off')));
+    await tester.pumpAndSettle();
+
+    expect(controller.autoStopLimit, isNull);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.containsKey('auto_stop_limit'), isFalse);
+  });
+
+  testWidgets('renders Danish auto-stop strings under the Danish locale',
+      (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+
+    await tester.scrollUntilVisible(find.byKey(const Key('auto_stop_4h')), 500);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Automatisk stop gåtur'), findsOneWidget);
+    expect(find.text('Fra'), findsOneWidget);
+    expect(find.text('Efter 1 time'), findsOneWidget);
+    expect(find.text('Efter 2 timer'), findsOneWidget);
+    expect(find.text('Efter 4 timer'), findsOneWidget);
   });
 
   testWidgets('shows the app version and build number at the bottom',

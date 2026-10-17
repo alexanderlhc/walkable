@@ -226,4 +226,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String settingsVersion(String version, String build) {
     return 'Version $version ($build)';
   }
+
+  @override
+  String get settingsAutoStop => 'Auto-stop walk';
+
+  @override
+  String get autoStopOff => 'Off';
+
+  @override
+  String autoStopAfterHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'After $hours hours',
+      one: 'After 1 hour',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String walkAutoStoppedNote(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Walk stopped automatically after $hours hours',
+      one: 'Walk stopped automatically after 1 hour',
+    );
+    return '$_temp0';
+  }
 }

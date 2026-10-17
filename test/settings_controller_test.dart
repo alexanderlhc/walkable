@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/units.dart';
@@ -44,6 +45,7 @@ void main() {
       when(() => repository.readThemeMode()).thenReturn(ThemeMode.system);
       when(() => repository.readLocaleCode()).thenThrow(TypeError());
       when(() => repository.readUnitsOverride()).thenReturn(null);
+      when(() => repository.readAutoStopLimit()).thenReturn(null);
       final controller = SettingsController(repository);
 
       controller.load();
@@ -210,6 +212,68 @@ void main() {
       await controller.setUnitsOverride(UnitSystem.metric);
 
       expect(controller.unitsOverride, UnitSystem.metric);
+    });
+  });
+
+  group('autoStopLimit', () {
+    test('defaults to null (Off) when nothing is stored', () async {
+      final controller = await buildController({});
+      controller.load();
+      expect(controller.autoStopLimit, isNull);
+    });
+
+    test('restores a persisted 2 h limit', () async {
+      final controller = await buildController({'auto_stop_limit': 'twoHours'});
+      controller.load();
+      expect(controller.autoStopLimit, AutoStopLimit.twoHours);
+    });
+
+    test('unknown stored value -> Off', () async {
+      final controller =
+          await buildController({'auto_stop_limit': 'ninetyMinutes'});
+      controller.load();
+      expect(controller.autoStopLimit, isNull);
+    });
+
+    test('type-corrupt stored value -> Off', () async {
+      final controller = await buildController({'auto_stop_limit': 120});
+      controller.load();
+      expect(controller.autoStopLimit, isNull);
+    });
+
+    test('setAutoStopLimit updates, notifies, and persists', () async {
+      final controller = await buildController({});
+      var notified = 0;
+      controller.addListener(() => notified++);
+
+      await controller.setAutoStopLimit(AutoStopLimit.fourHours);
+
+      expect(controller.autoStopLimit, AutoStopLimit.fourHours);
+      expect(notified, 1);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('auto_stop_limit'), 'fourHours');
+    });
+
+    test('null (Off) removes the stored key', () async {
+      final controller = await buildController({'auto_stop_limit': 'oneHour'});
+      controller.load();
+
+      await controller.setAutoStopLimit(null);
+
+      expect(controller.autoStopLimit, isNull);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.containsKey('auto_stop_limit'), isFalse);
+    });
+
+    test('persistence failure keeps the in-memory value', () async {
+      final repository = MockSettingsRepository();
+      when(() => repository.writeAutoStopLimit(any()))
+          .thenThrow(Exception('disk full'));
+      final controller = SettingsController(repository);
+
+      await controller.setAutoStopLimit(AutoStopLimit.oneHour);
+
+      expect(controller.autoStopLimit, AutoStopLimit.oneHour);
     });
   });
 }

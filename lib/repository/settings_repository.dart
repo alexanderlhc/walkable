@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/units.dart';
 
 /// Persists user settings. One key per setting; absence means "default".
@@ -7,6 +8,7 @@ class SettingsRepository {
   static const _localeKey = 'locale_override';
   static const _themeKey = 'theme_mode';
   static const _unitsKey = 'units_override';
+  static const _autoStopKey = 'auto_stop_limit';
 
   final SharedPreferences _prefs;
 
@@ -69,6 +71,26 @@ class SettingsRepository {
       await _prefs.remove(_unitsKey);
     } else {
       await _prefs.setString(_unitsKey, units.name);
+    }
+  }
+
+  /// The persisted auto-stop limit, or null for Off. Absent, unknown, or
+  /// corrupt data all mean Off — this never throws.
+  AutoStopLimit? readAutoStopLimit() {
+    String? name;
+    try {
+      name = _prefs.getString(_autoStopKey);
+    } catch (_) {
+      return null; // corrupt/typed data -> Off
+    }
+    return AutoStopLimit.values.asNameMap()[name];
+  }
+
+  Future<void> writeAutoStopLimit(AutoStopLimit? limit) async {
+    if (limit == null) {
+      await _prefs.remove(_autoStopKey);
+    } else {
+      await _prefs.setString(_autoStopKey, limit.name);
     }
   }
 }

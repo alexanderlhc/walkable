@@ -226,4 +226,32 @@ class AppLocalizationsDa extends AppLocalizations {
   String settingsVersion(String version, String build) {
     return 'Version $version ($build)';
   }
+
+  @override
+  String get settingsAutoStop => 'Automatisk stop gåtur';
+
+  @override
+  String get autoStopOff => 'Fra';
+
+  @override
+  String autoStopAfterHours(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Efter $hours timer',
+      one: 'Efter 1 time',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String walkAutoStoppedNote(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Gåturen blev stoppet automatisk efter $hours timer',
+      one: 'Gåturen blev stoppet automatisk efter 1 time',
+    );
+    return '$_temp0';
+  }
 }

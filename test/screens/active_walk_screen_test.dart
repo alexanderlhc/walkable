@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
 import 'package:walkable/models/walk.dart';
@@ -29,6 +30,7 @@ void main() {
   late MockLocationService locationService;
   late MockWalkRepository repository;
   late StreamController<WalkSnapshot> snapshotsCtrl;
+  late StreamController<AutoStop> autoStopsCtrl;
   late SettingsController settingsController;
 
   setUp(() {
@@ -36,6 +38,7 @@ void main() {
     locationService = MockLocationService();
     repository = MockWalkRepository();
     snapshotsCtrl = StreamController<WalkSnapshot>.broadcast();
+    autoStopsCtrl = StreamController<AutoStop>.broadcast();
     SharedPreferences.setMockInitialValues({});
     // SharedPreferences.getInstance() resolves synchronously enough for
     // setUp; fetch it inside buildSubject instead to keep setUp sync — see
@@ -43,11 +46,13 @@ void main() {
 
     when(() => recorder.state).thenReturn(RecorderState.idle);
     when(() => recorder.snapshots).thenAnswer((_) => snapshotsCtrl.stream);
+    when(() => recorder.autoStops).thenAnswer((_) => autoStopsCtrl.stream);
     when(() => recorder.locationService).thenReturn(locationService);
     when(() => recorder.start(
           notification: any(named: 'notification'),
           foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
+          autoStopLimit: any(named: 'autoStopLimit'),
         )).thenAnswer((_) async => LocationServiceResult.started);
     when(() => recorder.pause()).thenAnswer((_) async {});
     when(() =>
@@ -66,7 +71,10 @@ void main() {
     when(() => locationService.batterySaverRestrictsLocation).thenReturn(false);
   });
 
-  tearDown(() => snapshotsCtrl.close());
+  tearDown(() {
+    snapshotsCtrl.close();
+    autoStopsCtrl.close();
+  });
 
   Future<Widget> buildSubject({
     Locale? locale,
@@ -317,6 +325,7 @@ void main() {
           notification: any(named: 'notification'),
           foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
+          autoStopLimit: any(named: 'autoStopLimit'),
         )).called(1);
     expect(find.byKey(const Key('stop_button')), findsOneWidget);
     expect(find.byKey(const Key('pause_button')), findsOneWidget);
@@ -360,6 +369,7 @@ void main() {
           notification: any(named: 'notification'),
           foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
+          autoStopLimit: any(named: 'autoStopLimit'),
         )).thenAnswer((invocation) async {
       final consent = invocation.namedArguments[#backgroundConsent]
           as Future<bool> Function();
@@ -392,6 +402,7 @@ void main() {
           notification: any(named: 'notification'),
           foregroundConsent: any(named: 'foregroundConsent'),
           backgroundConsent: any(named: 'backgroundConsent'),
+          autoStopLimit: any(named: 'autoStopLimit'),
         )).thenAnswer((invocation) async {
       final consent = invocation.namedArguments[#backgroundConsent]
           as Future<bool> Function();
@@ -1143,5 +1154,143 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(shared, ['I walked 2.40 km in 28:00 with Walkable']);
+  });
+
+  // ─── auto-stop ─────────────────────────────────────────────────────────────
+
+  AutoStopLimit? startedWithAutoStop() => verify(() => recorder.start(
+        notification: any(named: 'notification'),
+        foregroundConsent: any(named: 'foregroundConsent'),
+        backgroundConsent: any(named: 'backgroundConsent'),
+        autoStopLimit: captureAny(named: 'autoStopLimit'),
+      )).captured.single as AutoStopLimit?;
+
+  testWidgets('starting a walk passes the persisted auto-stop limit',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({'auto_stop_limit': 'twoHours'});
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    expect(startedWithAutoStop(), AutoStopLimit.twoHours);
+  });
+
+  testWidgets('starting a walk with auto-stop Off passes no limit',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    expect(startedWithAutoStop(), isNull);
+  });
+
+  testWidgets(
+      'an auto-stop resets the recorder and shows the summary with the '
+      '"stopped automatically" note', (tester) async {
+    tester.platformDispatcher.localeTestValue = const Locale('en');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    when(() => recorder.state).thenReturn(RecorderState.stopped);
+
+    autoStopsCtrl
+        .add(AutoStop(walk: finishedWalk(), limit: AutoStopLimit.twoHours));
+    await tester.pumpAndSettle();
+
+    verify(() => recorder.reset()).called(1);
+    verifyNever(() => recorder.stop());
+    expect(find.text('Walk complete'), findsOneWidget);
+    expect(
+        find.text('Walk stopped automatically after 2 hours'), findsOneWidget);
+    expect(find.textContaining('28:00', findRichText: true), findsOneWidget);
+    expect(find.byKey(const Key('stop_button')), findsNothing);
+  });
+
+  testWidgets('the auto-stop note is not shown after a manual stop',
+      (tester) async {
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await finishWalkFlow(tester);
+
+    expect(find.text('Walk complete'), findsOneWidget);
+    expect(find.textContaining('stopped automatically'), findsNothing);
+  });
+
+  testWidgets('the auto-stop note is cleared once the summary is dismissed',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    autoStopsCtrl
+        .add(AutoStop(walk: finishedWalk(), limit: AutoStopLimit.oneHour));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('done_button')));
+    await tester.pumpAndSettle();
+
+    // A later manual stop shows the plain summary.
+    when(() => recorder.stop()).thenAnswer((_) async => finishedWalk());
+    when(() => recorder.state).thenReturn(RecorderState.recording);
+    await finishWalkFlow(tester);
+
+    expect(find.text('Walk complete'), findsOneWidget);
+    expect(find.textContaining('stopped automatically'), findsNothing);
+  });
+
+  testWidgets('an auto-stop with no saved walk falls back to idle',
+      (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    autoStopsCtrl.add(const AutoStop(walk: null, limit: AutoStopLimit.oneHour));
+    await tester.pumpAndSettle();
+
+    verify(() => recorder.reset()).called(1);
+    expect(find.text('Walk complete'), findsNothing);
+    expect(find.byKey(const Key('start_button')), findsOneWidget);
+  });
+
+  testWidgets('renders the auto-stop note in Danish', (tester) async {
+    await tester.pumpWidget(await buildSubject(locale: const Locale('da')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    autoStopsCtrl
+        .add(AutoStop(walk: finishedWalk(), limit: AutoStopLimit.oneHour));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gåturen blev stoppet automatisk efter 1 time'),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      'an auto-stop while the Back dialog is open keeps its summary when the '
+      'walker then picks Stop', (tester) async {
+    await tester.pumpWidget(await buildSubject());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    autoStopsCtrl
+        .add(AutoStop(walk: finishedWalk(), limit: AutoStopLimit.oneHour));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('leave_walk_stop')));
+    await tester.pumpAndSettle();
+
+    verifyNever(() => recorder.stop());
+    expect(find.text('Walk complete'), findsOneWidget);
+    expect(find.byKey(const Key('auto_stopped_note')), findsOneWidget);
   });
 }

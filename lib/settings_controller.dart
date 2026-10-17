@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:walkable/auto_stop.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/units.dart';
@@ -10,6 +11,7 @@ class SettingsController extends ChangeNotifier {
   Locale? _localeOverride;
   ThemeMode _themeMode = ThemeMode.system;
   UnitSystem? _unitsOverride;
+  AutoStopLimit? _autoStopLimit;
 
   SettingsController(this.repository);
 
@@ -19,6 +21,9 @@ class SettingsController extends ChangeNotifier {
 
   UnitSystem? get unitsOverride => _unitsOverride;
 
+  /// Null means auto-stop Off.
+  AutoStopLimit? get autoStopLimit => _autoStopLimit;
+
   /// Restores the persisted override. A code we no longer support (or
   /// corrupt data) degrades to following the system rather than crashing.
   ///
@@ -27,6 +32,7 @@ class SettingsController extends ChangeNotifier {
   void load() {
     _themeMode = repository.readThemeMode();
     _unitsOverride = repository.readUnitsOverride();
+    _autoStopLimit = repository.readAutoStopLimit();
     String? code;
     try {
       code = repository.readLocaleCode();
@@ -66,6 +72,17 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
     try {
       await repository.writeUnitsOverride(units);
+    } catch (_) {
+      // The choice still applies this session; it just won't survive a
+      // restart.
+    }
+  }
+
+  Future<void> setAutoStopLimit(AutoStopLimit? limit) async {
+    _autoStopLimit = limit;
+    notifyListeners();
+    try {
+      await repository.writeAutoStopLimit(limit);
     } catch (_) {
       // The choice still applies this session; it just won't survive a
       // restart.
