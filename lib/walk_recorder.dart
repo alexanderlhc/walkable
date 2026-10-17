@@ -163,9 +163,15 @@ class WalkRecorder {
     _state = RecorderState.paused;
     _ticker?.cancel();
     _ticker = null;
-    await _subscription?.cancel();
+    // Same rule as [_finalize]: a failed shutdown is logged, and the pause
+    // still persists its progress and emits its snapshot.
+    try {
+      await _subscription?.cancel();
+      await locationService.stop();
+    } catch (e) {
+      debugPrint('WalkRecorder: failed to stop location: $e');
+    }
     _subscription = null;
-    await locationService.stop();
     // Persist the pause-aware duration now that it just grew: pauses are the
     // moments where wall-clock inference would drift furthest, so this write
     // is what keeps a later crash recovery honest.
