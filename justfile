@@ -3,6 +3,12 @@
 flutter := "fvm flutter"
 emulator := "Walkable_Phone"
 
+# Build-time secrets (CARTO_API_KEY), written by `just carto-key`. Dev runs use
+# it when present; without it the map tiles show CARTO's "API key required"
+# watermark. Release builds refuse to run without it.
+defines_file := "dart_defines.local.json"
+defines := if path_exists(defines_file) == "true" { "--dart-define-from-file=" + defines_file } else { "" }
+
 # Show the available recipes.
 default:
     @just --list
@@ -15,7 +21,7 @@ deps:
 #   just run                 # auto-select a connected device
 #   just run emulator-5554   # a running emulator by id
 run device="":
-    {{flutter}} run {{ if device == "" { "" } else { "-d " + device } }}
+    {{flutter}} run {{defines}} {{ if device == "" { "" } else { "-d " + device } }}
 
 # Boot the phone emulator (if needed), then build and launch on it.
 launch:
@@ -30,7 +36,7 @@ launch:
             sleep 2
         done
     fi
-    {{flutter}} run
+    {{flutter}} run {{defines}}
 
 # Static analysis.
 analyze:
@@ -44,13 +50,22 @@ test:
 fmt:
     fvm dart format lib test
 
-# Build a release APK (sideloadable).
-apk:
-    {{flutter}} build apk --release
+# Build a release APK (sideloadable), with the CARTO key.
+apk: _require-defines
+    {{flutter}} build apk --release --dart-define-from-file={{defines_file}}
 
-# Build a release App Bundle (.aab) for the Play Store.
-bundle:
-    {{flutter}} build appbundle --release
+# Build a release App Bundle (.aab) for the Play Store, with the CARTO key.
+bundle: _require-defines
+    {{flutter}} build appbundle --release --dart-define-from-file={{defines_file}}
+
+# Get the CARTO basemaps API key and store it (GitHub secret CARTO_API_KEY +
+# the gitignored dart_defines.local.json here and in the main checkout).
+carto-key:
+    tool/carto_key.sh
+
+[private]
+_require-defines:
+    @test -f {{defines_file}} || { echo "missing {{defines_file}}: run 'just carto-key' first (release maps would be blank)"; exit 1; }
 
 # Regenerate Play Store screenshots (light + dark). Optionally one device:
 #   just screenshots             # phone + 7" + 10"

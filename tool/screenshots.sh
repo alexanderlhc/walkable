@@ -17,6 +17,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
+# CARTO_API_KEY for the map tiles (`just carto-key`); without it the store
+# assets would show CARTO's "API key required" watermark instead of a map.
+[[ -f dart_defines.local.json ]] || { echo "missing dart_defines.local.json: run 'just carto-key' first" >&2; exit 1; }
 
 # ── Config ────────────────────────────────────────────────────────────────────
 SDK="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
@@ -124,6 +127,7 @@ capture() {
   # production code changes (the VM service the driver needs is still present).
   SCREENSHOT_OUT="$out" $FLUTTER drive \
     --profile \
+    --dart-define-from-file=dart_defines.local.json \
     --driver=test_driver/screenshot_driver.dart \
     --target=integration_test/screenshot_test.dart \
     -d "$SERIAL"
