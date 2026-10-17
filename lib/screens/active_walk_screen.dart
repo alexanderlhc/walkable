@@ -52,9 +52,9 @@ class ActiveWalkScreen extends StatefulWidget {
   State<ActiveWalkScreen> createState() => _ActiveWalkScreenState();
 }
 
-/// A finished walk the post-walk summary presents, with the auto-stop limit in
-/// force when it ended, in hours (null after a manual stop).
-typedef _CompletedWalk = ({Walk walk, int? autoStoppedAfterHours});
+/// A finished walk the post-walk summary presents, with the auto-stop that
+/// ended it (null after a manual stop) for the summary's note.
+typedef _CompletedWalk = ({Walk walk, AutoStop? autoStop});
 
 class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   WalkSnapshot? _snapshot;
@@ -139,7 +139,7 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
     _autoStopSub = widget.recorder.autoStops.listen((autoStop) {
       widget.recorder.reset();
       if (!mounted) return;
-      _showStopped(autoStop.walk, autoStoppedAfterHours: autoStop.hours);
+      _showStopped(autoStop.walk, autoStop: autoStop);
     });
     // Deferred to after the first frame: the foreground-location disclosure
     // dialog needs localizations and a Navigator, neither of which are
@@ -418,16 +418,14 @@ class _ActiveWalkScreenState extends State<ActiveWalkScreen> {
   }
 
   /// Post-stop landing shared by a manual stop and an auto-stop (which passes
-  /// its [autoStoppedAfterHours] for the summary's note). The recorder has
-  /// already been reset.
-  void _showStopped(Walk? walk, {int? autoStoppedAfterHours}) {
+  /// its [autoStop] for the summary's note). The recorder has already been
+  /// reset.
+  void _showStopped(Walk? walk, {AutoStop? autoStop}) {
     setState(() {
       _recorderState = RecorderState.idle;
       // Null (nothing recorded, or the save failed) skips the summary and
       // falls straight back to idle — there is no saved walk to present.
-      _completed = walk == null
-          ? null
-          : (walk: walk, autoStoppedAfterHours: autoStoppedAfterHours);
+      _completed = walk == null ? null : (walk: walk, autoStop: autoStop);
     });
     if (walk != null) {
       // Fit the camera to the finished route once the summary panel has laid
@@ -762,7 +760,8 @@ class _BottomPanel extends StatefulWidget {
 
   // When non-null (and the recorder is idle), the panel shows the "walk
   // complete" summary for this walk instead of the Start button, with the
-  // "stopped automatically" note when it was auto-stopped.
+  // "stopped automatically" note when it was auto-stopped (or a "stopped
+  // before the limit" note after Stop now).
   final _CompletedWalk? completed;
   final VoidCallback onDismissCompleted;
   final VoidCallback onViewRoute;
@@ -925,10 +924,12 @@ class _BottomPanelState extends State<_BottomPanel> {
           l10n.walkCompleteSubtitle,
           style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
         ),
-        if (completed.autoStoppedAfterHours case final hours?) ...[
+        if (completed.autoStop case final autoStop?) ...[
           const SizedBox(height: 4),
           Text(
-            l10n.walkAutoStoppedNote(hours),
+            autoStop.stoppedEarly
+                ? l10n.walkStoppedEarlyNote(autoStop.hours)
+                : l10n.walkAutoStoppedNote(autoStop.hours),
             key: const Key('auto_stopped_note'),
             textAlign: TextAlign.center,
             style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),

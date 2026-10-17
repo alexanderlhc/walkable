@@ -1440,12 +1440,14 @@ void main() {
 
   testWidgets(
       'STOP NOW on the banner calls stopNow, and its auto-stop event shows '
-      'the summary with the note', (tester) async {
+      'the summary with a stopped-early note', (tester) async {
     tester.platformDispatcher.localeTestValue = const Locale('en');
     addTearDown(tester.platformDispatcher.clearLocaleTestValue);
     when(() => recorder.stopNow()).thenAnswer((_) async {
-      autoStopsCtrl
-          .add(AutoStop(walk: finishedWalk(), limit: AutoStopLimit.oneHour));
+      autoStopsCtrl.add(AutoStop(
+          walk: finishedWalk(),
+          limit: AutoStopLimit.oneHour,
+          stoppedEarly: true));
     });
     await startRecording(tester);
     snapshotsCtrl.add(warningSnapshot(const Duration(minutes: 3)));
@@ -1457,8 +1459,26 @@ void main() {
     verify(() => recorder.stopNow()).called(1);
     verifyNever(() => recorder.stop());
     expect(find.text('Walk complete'), findsOneWidget);
-    expect(
-        find.text('Walk stopped automatically after 1 hour'), findsOneWidget);
+    // The walker stopped it before the limit, so it doesn't claim the limit.
+    expect(find.byKey(const Key('auto_stopped_note')), findsOneWidget);
+    expect(find.text('Walk stopped automatically after 1 hour'), findsNothing);
+    expect(find.text('Walk stopped before its 1-hour limit'), findsOneWidget);
+  });
+
+  testWidgets('renders the stopped-early note in Danish', (tester) async {
+    await tester.pumpWidget(await buildSubject(locale: const Locale('da')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('start_button')));
+    await tester.pumpAndSettle();
+
+    autoStopsCtrl.add(AutoStop(
+        walk: finishedWalk(),
+        limit: AutoStopLimit.twoHours,
+        stoppedEarly: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gåturen blev stoppet før grænsen på 2 timer'),
+        findsOneWidget);
   });
 
   testWidgets('the auto-stop note counts the periods Keep walking added',

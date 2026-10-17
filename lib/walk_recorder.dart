@@ -51,7 +51,16 @@ class AutoStop {
   /// walking".
   final int periods;
 
-  const AutoStop({required this.walk, required this.limit, this.periods = 1});
+  /// Whether the walker chose "stop now" before the limit was reached; false
+  /// when the walk ran to the limit.
+  final bool stoppedEarly;
+
+  const AutoStop({
+    required this.walk,
+    required this.limit,
+    this.periods = 1,
+    this.stoppedEarly = false,
+  });
 
   /// The limit in force when the walk stopped, in whole hours.
   int get hours => limit.hours * periods;
@@ -196,13 +205,7 @@ class WalkRecorder {
     _ticker = null;
     // Same rule as [_finalize]: a failed shutdown is logged, and the pause
     // still persists its progress and emits its snapshot.
-    try {
-      await _subscription?.cancel();
-      await locationService.stop();
-    } catch (e) {
-      debugPrint('WalkRecorder: failed to stop location: $e');
-    }
-    _subscription = null;
+    await _stopLocation();
     // Persist the pause-aware duration now that it just grew: pauses are the
     // moments where wall-clock inference would drift furthest, so this write
     // is what keeps a later crash recovery honest.
@@ -313,9 +316,8 @@ class WalkRecorder {
     // Both callers run only while recording, so the open period holds the
     // moment the limit is crossed.
     final limitEnd = _periodStart!.add(stopAt - _accumulatedDuration);
-    final walk = await _stop(
-        endTime:
-            endTime == null || endTime.isAfter(limitEnd) ? limitEnd : endTime);
+    final stoppedEarly = endTime != null && endTime.isBefore(limitEnd);
+    final walk = await _stop(endTime: stoppedEarly ? endTime : limitEnd);
     // Only a walk that was actually saved earns the "stopped and saved"
     // notice; the stop itself already withdrew the warning.
     if (walk != null) _alert(_alerts.showStoppedNotice);
@@ -324,6 +326,7 @@ class WalkRecorder {
         walk: walk,
         limit: limit,
         periods: _autoStopPeriods,
+        stoppedEarly: stoppedEarly,
       ));
     }
   }
@@ -357,13 +360,7 @@ class WalkRecorder {
     }
     // A failed shutdown must not cost the walk: it is over either way, so log
     // and go on to save it (and so stop() never throws).
-    try {
-      await _subscription?.cancel();
-      await locationService.stop();
-    } catch (e) {
-      debugPrint('WalkRecorder: failed to stop location: $e');
-    }
-    _subscription = null;
+    await _stopLocation();
     _state = RecorderState.stopped;
 
     _snapshots.add(_buildSnapshot(end));
@@ -383,6 +380,23 @@ class WalkRecorder {
     } catch (e) {
       debugPrint('WalkRecorder: failed to finish walk $_id: $e');
       return null;
+    }
+  }
+
+  /// Cancels the position subscription and stops location, each on its own:
+  /// a throwing cancel must not skip the stop and leave location (and the
+  /// foreground service) running. Each failure is logged; neither throws.
+  Future<void> _stopLocation() async {
+    try {
+      await _subscription?.cancel();
+    } catch (e) {
+      debugPrint('WalkRecorder: failed to cancel position subscription: $e');
+    }
+    _subscription = null;
+    try {
+      await locationService.stop();
+    } catch (e) {
+      debugPrint('WalkRecorder: failed to stop location: $e');
     }
   }
 
