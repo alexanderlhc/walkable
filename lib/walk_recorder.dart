@@ -420,9 +420,34 @@ class WalkRecorder {
     }
   }
 
-  void dispose() {
+  /// Ends the recorder for good. A walk still recording or paused is not
+  /// finished but left for startup recovery, like a walk whose process died
+  /// ([WalkRepository.recoverOrphans]): its pause-aware moving time is written
+  /// to the open walk row, and location is stopped so the foreground service
+  /// doesn't outlive the recorder. Everything up to the first await — the
+  /// progress write being queued and the subscription cancel — happens
+  /// synchronously, so a caller that can't wait still gets it under way; the
+  /// returned future completes once location is stopped and every pending
+  /// write is drained.
+  Future<void> dispose() async {
     _ticker?.cancel();
-    _subscription?.cancel();
+    _ticker = null;
+    if (!_stopping &&
+        (_state == RecorderState.recording || _state == RecorderState.paused)) {
+      // Its "stop now" action would have no walk left to stop.
+      _setAutoStopWarning(false);
+      final now = _now();
+      if (_periodStart != null) {
+        _accumulatedDuration += now.difference(_periodStart!);
+        _periodStart = null;
+      }
+      _persistProgress(now);
+      // Not a finished walk, but a disposed recorder must ignore any later
+      // pause/resume/stop rather than act on a walk it no longer owns.
+      _state = RecorderState.stopped;
+      await _stopLocation();
+    }
+    await _persist;
     _snapshots.close();
     _autoStops.close();
   }

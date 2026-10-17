@@ -316,7 +316,7 @@ void main() {
   });
 
   tearDown(() async {
-    recorder.dispose();
+    await recorder.dispose();
     location.dispose();
     await repository.close();
   });
@@ -830,6 +830,77 @@ void main() {
   // The pause-aware duration exists only in the recorder's memory; these
   // periodic writes are what crash recovery falls back on. See
   // WalkRepository.recoverOrphans.
+  group('dispose mid-walk', () {
+    test('dispose while recording stops location', () async {
+      await recorder.start();
+
+      await recorder.dispose();
+
+      expect(location.stopCalls, 1);
+    });
+
+    test('dispose while paused stops location', () async {
+      await recorder.start();
+      await recorder.pause();
+      final stopsBefore = location.stopCalls;
+
+      await recorder.dispose();
+
+      expect(location.stopCalls, stopsBefore + 1);
+    });
+
+    test('a failed subscription cancel on dispose still stops location',
+        () async {
+      await recorder.start();
+      location.failCancel = true;
+
+      await recorder.dispose();
+
+      expect(location.stopCalls, 1);
+    });
+
+    test('a dispose whose cancel and location stop both fail logs each',
+        () async {
+      final logs = _captureDebugPrint();
+      await recorder.start();
+      location.failCancel = true;
+      location.failStop = true;
+
+      await recorder.dispose();
+
+      expect(logs.where((l) => l.contains('position cancel rejected')),
+          hasLength(1));
+      expect(logs.where((l) => l.contains('location stop rejected')),
+          hasLength(1));
+    });
+
+    test('crash recovery salvages a walk disposed mid-recording with its '
+        'pause-aware moving time', () async {
+      await recorder.start();
+      location.emit(_pos(55.676, 12.568));
+      location.emit(_pos(55.677, 12.568));
+      await Future<void>.delayed(Duration.zero);
+      clock.advance(const Duration(seconds: 20));
+      await recorder.pause();
+      clock.advance(const Duration(minutes: 5)); // paused: doesn't count
+      await recorder.resume();
+      clock.advance(const Duration(seconds: 10));
+
+      await recorder.dispose();
+
+      // The walk is left unfinished for startup recovery, not saved as done.
+      expect(await repository.recoverOrphans(), 1);
+      final walks = await repository.findAll();
+      expect(walks.single.duration, const Duration(seconds: 30));
+    });
+
+    test('dispose with no walk in progress leaves location alone', () async {
+      await recorder.dispose();
+
+      expect(location.stopCalls, 0);
+    });
+  });
+
   group('progress persistence', () {
     test('ticker writes progress once per 30 s of recording, not per tick', () {
       fakeAsync((async) {
@@ -1495,6 +1566,18 @@ void main() {
           h.record(limitTime);
           expect(
               h.alerts.calls, ['showWarning', 'cancelWarning', 'showWarning']);
+        });
+      });
+
+      test('dispose during the warning cancels it', () {
+        autoStopTest((h) {
+          h.recorder.start(autoStopLimit: limit);
+          h.flush();
+          h.record(limitTime - grace);
+
+          h.recorder.dispose();
+          h.flush();
+          expect(h.alerts.calls, ['showWarning', 'cancelWarning']);
         });
       });
 

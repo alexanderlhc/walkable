@@ -813,7 +813,6 @@ void main() {
       locationService: locationService,
       repository: repository,
     );
-    addTearDown(realRecorder.dispose);
     when(() => locationService.start(
           notification: any(named: 'notification'),
           foregroundConsent: any(named: 'foregroundConsent'),
@@ -842,6 +841,12 @@ void main() {
     expect(find.text('PAUSED'), findsOneWidget);
     expect(find.byKey(const Key('resume_button')), findsOneWidget);
     expect(find.byKey(const Key('pause_button')), findsNothing);
+
+    // Disposed here, not in a tear-down: a paused walk's dispose() awaits
+    // futures made in the test's fake-async zone, which only a pump flushes.
+    final disposed = realRecorder.dispose();
+    await tester.pump();
+    await disposed;
   });
 
   testWidgets('PAUSED label visible when paused', (tester) async {
