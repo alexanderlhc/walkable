@@ -111,6 +111,13 @@
       "hours": { "type": "int" }
     }
   },
+  "walkStoppedEarlyNote": "{hours, plural, =1{Walk stopped before its 1-hour limit} other{Walk stopped before its {hours}-hour limit}}",
+  "@walkStoppedEarlyNote": {
+    "description": "Summary note after Stop now on the auto-stop warning, before the limit was reached.",
+    "placeholders": {
+      "hours": { "type": "int" }
+    }
+  },
   "autoStopWarningTitle": "Still walking?",
   "autoStopWarningCountdown": "Your walk will stop in {time}",
   "@autoStopWarningCountdown": {

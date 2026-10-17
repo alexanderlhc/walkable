@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:walkable/auto_stop.dart';
@@ -29,6 +30,10 @@ class _StubLocationService extends LocationService {
   /// When true, [stop] throws (e.g. the platform channel failed).
   bool failStop = false;
 
+  /// When true, cancelling a position subscription throws. Read when the
+  /// subscription is cancelled.
+  bool failCancel = false;
+
   int startCalls = 0;
   int stopCalls = 0;
 
@@ -53,7 +58,19 @@ class _StubLocationService extends LocationService {
   }
 
   @override
-  Stream<Position> get positions => _ctrl.stream;
+  Stream<Position> get positions {
+    late StreamSubscription<Position> inner;
+    late final StreamController<Position> ctrl;
+    ctrl = StreamController<Position>(
+      onListen: () =>
+          inner = _ctrl.stream.listen(ctrl.add, onError: ctrl.addError),
+      onCancel: () async {
+        await inner.cancel();
+        if (failCancel) throw StateError('position cancel rejected');
+      },
+    );
+    return ctrl.stream;
+  }
 
   void emit(Position pos) => _ctrl.add(pos);
 
@@ -173,9 +190,10 @@ class _FakeAsyncLocationService extends _StubLocationService {
     late final StreamController<Position> ctrl;
     ctrl = StreamController<Position>(
       onListen: () =>
-          inner = super.positions.listen(ctrl.add, onError: ctrl.addError),
+          inner = _ctrl.stream.listen(ctrl.add, onError: ctrl.addError),
       onCancel: () async {
         unawaited(inner.cancel());
+        if (failCancel) throw StateError('position cancel rejected');
       },
     );
     return ctrl.stream;
@@ -271,6 +289,15 @@ Position _pos(double lat, double lng) => Position(
       speedAccuracy: 0.0,
     );
 
+/// Collects [debugPrint] output for the rest of the test.
+List<String> _captureDebugPrint() {
+  final logs = <String>[];
+  final original = debugPrint;
+  debugPrint = (String? message, {int? wrapWidth}) => logs.add(message ?? '');
+  addTearDown(() => debugPrint = original);
+  return logs;
+}
+
 void main() {
   late _StubLocationService location;
   late _FakeClock clock;
@@ -335,6 +362,36 @@ void main() {
     expect(walk, isNotNull);
     expect(walk!.duration, const Duration(seconds: 30));
     expect(walk.coordinates.length, 2);
+  });
+
+  test('a failed subscription cancel on stop still stops location', () async {
+    await recorder.start();
+    location.emit(_pos(55.676, 12.568));
+    await Future<void>.delayed(Duration.zero);
+    clock.advance(const Duration(seconds: 30));
+    location.failCancel = true;
+
+    final walk = await recorder.stop();
+
+    expect(location.stopCalls, 1);
+    expect(recorder.state, RecorderState.stopped);
+    expect(walk!.duration, const Duration(seconds: 30));
+  });
+
+  test('a stop whose cancel and location stop both fail logs each', () async {
+    final logs = _captureDebugPrint();
+    await recorder.start();
+    location.failCancel = true;
+    location.failStop = true;
+
+    final walk = await recorder.stop();
+
+    expect(recorder.state, RecorderState.stopped);
+    expect(walk, isNotNull);
+    expect(logs.where((l) => l.contains('position cancel rejected')),
+        hasLength(1));
+    expect(
+        logs.where((l) => l.contains('location stop rejected')), hasLength(1));
   });
 
   test('stop returns the saved walk hydrated with its coordinates', () async {
@@ -440,6 +497,37 @@ void main() {
     expect(flaky.updateProgressCalls, [const Duration(seconds: 20)]);
     expect(snapshots.last.stats.duration, const Duration(seconds: 20));
     await sub.cancel();
+  });
+
+  test('a failed subscription cancel on pause still stops location', () async {
+    await recorder.start();
+    final snapshots = <WalkSnapshot>[];
+    final sub = recorder.snapshots.listen(snapshots.add);
+    clock.advance(const Duration(seconds: 20));
+    location.failCancel = true;
+
+    await recorder.pause();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(location.stopCalls, 1);
+    expect(recorder.state, RecorderState.paused);
+    expect(snapshots.last.stats.duration, const Duration(seconds: 20));
+    await sub.cancel();
+  });
+
+  test('a pause whose cancel and location stop both fail logs each', () async {
+    final logs = _captureDebugPrint();
+    await recorder.start();
+    location.failCancel = true;
+    location.failStop = true;
+
+    await recorder.pause();
+
+    expect(recorder.state, RecorderState.paused);
+    expect(logs.where((l) => l.contains('position cancel rejected')),
+        hasLength(1));
+    expect(
+        logs.where((l) => l.contains('location stop rejected')), hasLength(1));
   });
 
   test('resume and stop work after a pause whose shutdown failed', () async {
@@ -930,6 +1018,7 @@ void main() {
         expect(walk!.duration, limitTime);
         expect(walk.distanceMetres, greaterThan(0));
         expect(h.autoStops.single.limit, limit);
+        expect(h.autoStops.single.stoppedEarly, isFalse);
       });
     });
 
@@ -1086,6 +1175,22 @@ void main() {
         expect(h.autoStops.single.walk!.duration, limitTime);
         h.recorder.reset();
         expect(h.recorder.state, RecorderState.idle);
+      });
+    });
+
+    test(
+        'a failed subscription cancel during the auto-stop still stops '
+        'location and announces the walk', () {
+      autoStopTest((h) {
+        h.recorder.start(autoStopLimit: limit);
+        h.flush();
+        h.location.failCancel = true;
+
+        h.record(limitTime);
+
+        expect(h.location.stopCalls, 1);
+        expect(h.recorder.state, RecorderState.stopped);
+        expect(h.autoStops.single.walk!.duration, limitTime);
       });
     });
 
@@ -1249,6 +1354,7 @@ void main() {
               autoStop.walk!.duration, limitTime - const Duration(minutes: 3));
           expect(autoStop.limit, limit);
           expect(autoStop.hours, 1);
+          expect(autoStop.stoppedEarly, isTrue);
 
           // The ticker is gone: no second event at the limit.
           h.record(const Duration(minutes: 10));
@@ -1326,6 +1432,8 @@ void main() {
           h.flush();
 
           expect(h.autoStops.single.walk!.duration, limitTime);
+          // It ran to the limit after all.
+          expect(h.autoStops.single.stoppedEarly, isFalse);
         });
       });
 

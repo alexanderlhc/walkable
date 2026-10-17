@@ -512,6 +512,12 @@ abstract class AppLocalizations {
   /// **'{hours, plural, =1{Walk stopped automatically after 1 hour} other{Walk stopped automatically after {hours} hours}}'**
   String walkAutoStoppedNote(int hours);
 
+  /// Summary note after Stop now on the auto-stop warning, before the limit was reached.
+  ///
+  /// In en, this message translates to:
+  /// **'{hours, plural, =1{Walk stopped before its 1-hour limit} other{Walk stopped before its {hours}-hour limit}}'**
+  String walkStoppedEarlyNote(int hours);
+
   /// No description provided for @autoStopWarningTitle.
   ///
   /// In en, this message translates to:

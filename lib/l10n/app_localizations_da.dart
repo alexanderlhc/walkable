@@ -256,6 +256,17 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String walkStoppedEarlyNote(int hours) {
+    String _temp0 = intl.Intl.pluralLogic(
+      hours,
+      locale: localeName,
+      other: 'Gåturen blev stoppet før grænsen på $hours timer',
+      one: 'Gåturen blev stoppet før grænsen på 1 time',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get autoStopWarningTitle => 'Går du stadig?';
 
   @override
