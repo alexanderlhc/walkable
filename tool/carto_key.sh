@@ -184,7 +184,6 @@ finish() {
   printf '\n'
 }
 
-
 # ──────────────────────────────────────────────────────────────────────────
 # STAGES: CARTO basemaps API key → GitHub secret + local dart-define file.
 # ──────────────────────────────────────────────────────────────────────────
@@ -206,7 +205,9 @@ TILE_PATH=rastertiles/voyager_nolabels/3/4/2.png
 # goes to curl on stdin so it never shows up in argv.
 tile_etag() {
   local url="https://a.basemaps.cartocdn.com/$TILE_PATH"
-  [[ -n "${1:-}" ]] && url+="?key=$1"
+  # URL-encoding also keeps any " or \ out of the curl config line.
+  [[ -n "${1:-}" ]] && url+="?key=$(CARTO_API_KEY="$1" python3 -c \
+    'import os, urllib.parse; print(urllib.parse.quote_plus(os.environ["CARTO_API_KEY"]))')"
   printf 'url = "%s"\n' "$url" \
     | curl -sS -K - -o /dev/null -D - \
     | tr -d '\r' | sed -n 's/^etag: *//Ip' | tr -d '"'
@@ -245,6 +246,12 @@ pause "Decided? Press Enter to request the key"
 
 # ──────────────────────────────────────────────────────────────────────────
 stage "Request the key"
+# Re-run (e.g. key rotation): offer the key already stored here.
+CARTO_API_KEY=""
+if [[ -f "$REPO_ROOT/$DEFINES_NAME" ]] && ! confirm "A key is already stored in $DEFINES_NAME. Replace it with a new one?"; then
+  CARTO_API_KEY=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1])).get("CARTO_API_KEY", ""))' "$REPO_ROOT/$DEFINES_NAME")
+fi
+if [[ -z "$CARTO_API_KEY" ]]; then
 open_url "https://carto.com/basemaps/apikey"
 step "Click \"Request a key\" (if the form doesn't load, use"
 note "    https://dashboard.basemaps.carto.com instead)."
@@ -254,6 +261,7 @@ note "    the sign-in link — no password, the link is the login."
 step "In the Basemaps dashboard, copy the API key."
 say ""
 ask_secret CARTO_API_KEY "Paste the key (hidden):"
+fi
 [[ -n "$CARTO_API_KEY" ]] || { warn "no key entered; re-run when you have it"; exit 1; }
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -274,7 +282,7 @@ pause
 
 # ──────────────────────────────────────────────────────────────────────────
 stage "Store the key"
-say "GitHub Actions secret CARTO_API_KEY (for CI release builds), plus the"
+say "GitHub Actions secret CARTO_API_KEY (for the tag-triggered release workflow), plus the"
 say "gitignored $DEFINES_NAME that \`just apk\` / \`just bundle\` / fastlane read."
 say ""
 set_secret CARTO_API_KEY "$CARTO_API_KEY"
@@ -288,12 +296,13 @@ exclude="$(git rev-parse --path-format=absolute --git-common-dir)/info/exclude"
 mkdir -p "$(dirname "$exclude")"
 grep -qxF "/$DEFINES_NAME" "$exclude" 2>/dev/null || printf '/%s\n' "$DEFINES_NAME" >> "$exclude"
 for root in "$REPO_ROOT" "$MAIN_ROOT"; do
-  if ! git -C "$root" check-ignore -q "$DEFINES_NAME"; then
+  if git -C "$root" check-ignore -q "$DEFINES_NAME"; then
+    note "$root/$DEFINES_NAME is git-ignored."
+  else
     warn "$DEFINES_NAME is NOT ignored in $root — don't commit it."
     SKIPPED+=("make git ignore $root/$DEFINES_NAME")
   fi
 done
-note "$DEFINES_NAME is git-ignored."
 pause
 
 # ──────────────────────────────────────────────────────────────────────────

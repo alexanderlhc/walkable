@@ -20,6 +20,9 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
+# CARTO_API_KEY for the map tiles (`just carto-key`); without it the store
+# assets would show CARTO's "API key required" watermark instead of a map.
+[[ -f dart_defines.local.json ]] || { echo "missing dart_defines.local.json: run 'just carto-key' first" >&2; exit 1; }
 
 OUT="${1:-build/walkthrough.mp4}"
 OUT="$(mkdir -p "$(dirname "$OUT")" && cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
@@ -141,6 +144,7 @@ log "Driving the walkthrough…"
 # the driver needs.
 $FLUTTER drive \
   --profile \
+  --dart-define-from-file=dart_defines.local.json \
   --driver=test_driver/walkthrough_driver.dart \
   --target=integration_test/walkthrough_test.dart \
   -d "$SERIAL"
