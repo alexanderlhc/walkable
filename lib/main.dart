@@ -47,22 +47,24 @@ void main() async {
   final locationService = LocationService();
   // System notifications are Android-only; the desktop builds used for
   // development go without.
-  final notifications = defaultTargetPlatform == TargetPlatform.android
+  final AutoStopAlerts alerts = defaultTargetPlatform == TargetPlatform.android
       ? AutoStopNotifications(
           localizations: () => lookupAppLocalizations(
               settingsController.localeOverride ??
                   resolveAppLocale(PlatformDispatcher.instance.locale)),
         )
-      : null;
+      : const NoAutoStopAlerts();
   final recorder = WalkRecorder(
     locationService: locationService,
     repository: repository,
-    alerts: notifications ?? const NoAutoStopAlerts(),
+    alerts: alerts,
   );
-  await notifications?.initialize(
-    onKeepWalking: recorder.keepWalking,
-    onStopNow: recorder.stopNow,
-  );
+  if (alerts is AutoStopNotifications) {
+    await alerts.initialize(
+      onKeepWalking: recorder.keepWalking,
+      onStopNow: recorder.stopNow,
+    );
+  }
   runApp(WalkableApp(
     recorder: recorder,
     repository: repository,

@@ -471,7 +471,9 @@ class WalkRecorder {
   void _setAutoStopWarning(bool active) {
     if (active == _autoStopWarning) return;
     _autoStopWarning = active;
-    _alert(active ? _alerts.showWarning : _alerts.cancelWarning);
+    _alert(active
+        ? () => _alerts.showWarning(_autoStopAt! - _elapsedAt(_now()))
+        : _alerts.cancelWarning);
   }
 
   /// Runs an [AutoStopAlerts] call without waiting on it. Alerts are

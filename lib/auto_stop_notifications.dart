@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:walkable/auto_stop_alerts.dart';
 import 'package:walkable/l10n/app_localizations.dart';
-import 'package:walkable/walk_recorder.dart';
 
 /// The production [AutoStopAlerts]: Android system notifications through
 /// flutter_local_notifications, so the warning reaches a walker whose phone
@@ -18,13 +17,11 @@ class AutoStopNotifications implements AutoStopAlerts {
   /// the language setting.
   final AppLocalizations Function() _localizations;
 
-  final FlutterLocalNotificationsPlugin _plugin;
+  final _plugin = FlutterLocalNotificationsPlugin();
 
   AutoStopNotifications({
     required AppLocalizations Function() localizations,
-    FlutterLocalNotificationsPlugin? plugin,
-  })  : _localizations = localizations,
-        _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+  }) : _localizations = localizations;
 
   // The warning and the notice share one id, so the notice takes the
   // warning's place and one cancel clears whichever is up.
@@ -62,18 +59,23 @@ class AutoStopNotifications implements AutoStopAlerts {
           }
         },
       );
-      await _plugin.cancel(id: _notificationId);
     } catch (e) {
       debugPrint('AutoStopNotifications: initialize failed: $e');
+    }
+    try {
+      await _plugin.cancel(id: _notificationId);
+    } catch (e) {
+      debugPrint('AutoStopNotifications: clearing stale alerts failed: $e');
     }
   }
 
   @override
-  Future<void> showWarning() {
+  Future<void> showWarning(Duration timeLeft) {
     final l10n = _localizations();
     return _show(
+      l10n,
       title: l10n.autoStopWarningTitle,
-      body: l10n.autoStopWarningBody(WalkRecorder.autoStopGrace.inMinutes),
+      body: l10n.autoStopWarningBody(timeLeft.inMinutes),
       // Stays until the walker answers or the recorder withdraws it, even if
       // they tap the body and leave the app without choosing.
       autoCancel: false,
@@ -93,19 +95,20 @@ class AutoStopNotifications implements AutoStopAlerts {
   Future<void> showStoppedNotice() {
     final l10n = _localizations();
     return _show(
+      l10n,
       title: l10n.autoStopNoticeTitle,
       body: l10n.autoStopNoticeBody,
       autoCancel: true,
     );
   }
 
-  Future<void> _show({
+  Future<void> _show(
+    AppLocalizations l10n, {
     required String title,
     required String body,
     required bool autoCancel,
     List<AndroidNotificationAction>? actions,
   }) {
-    final l10n = _localizations();
     return _plugin.show(
       id: _notificationId,
       title: title,

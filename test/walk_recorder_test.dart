@@ -186,6 +186,8 @@ class _FakeAsyncLocationService extends _StubLocationService {
 /// order. Can be told to throw, as a broken notification plugin might.
 class _FakeAutoStopAlerts implements AutoStopAlerts {
   final List<String> calls = [];
+  // The time left passed with each showWarning call.
+  final List<Duration> warningTimeLeft = [];
   bool fail = false;
 
   Future<void> _record(String call) async {
@@ -194,7 +196,10 @@ class _FakeAutoStopAlerts implements AutoStopAlerts {
   }
 
   @override
-  Future<void> showWarning() => _record('showWarning');
+  Future<void> showWarning(Duration timeLeft) {
+    warningTimeLeft.add(timeLeft);
+    return _record('showWarning');
+  }
 
   @override
   Future<void> cancelWarning() => _record('cancelWarning');
@@ -1346,6 +1351,7 @@ void main() {
 
           h.record(const Duration(minutes: 2));
           expect(h.alerts.calls, ['showWarning']);
+          expect(h.alerts.warningTimeLeft, [grace]);
         });
       });
 

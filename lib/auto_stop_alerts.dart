@@ -7,8 +7,8 @@
 /// none, and auto-stop works the same.
 abstract interface class AutoStopAlerts {
   /// Shows the "Still walking?" warning with its Keep walking / Stop now
-  /// choice.
-  Future<void> showWarning();
+  /// choice; the walk stops itself after [timeLeft] more moving time.
+  Future<void> showWarning(Duration timeLeft);
 
   /// Withdraws the warning: the walker answered it, or the walk paused or
   /// ended.
@@ -24,7 +24,7 @@ class NoAutoStopAlerts implements AutoStopAlerts {
   const NoAutoStopAlerts();
 
   @override
-  Future<void> showWarning() async {}
+  Future<void> showWarning(Duration timeLeft) async {}
 
   @override
   Future<void> cancelWarning() async {}
