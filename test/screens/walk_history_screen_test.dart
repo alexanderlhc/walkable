@@ -137,6 +137,29 @@ void main() {
     expect(find.text('1.23 km'), findsOneWidget);
   });
 
+  testWidgets('long stats fit a small phone without overflowing',
+      (tester) async {
+    // 320 dp wide, the default CI emulator. A 10 km, 2-hour walk is about the
+    // widest the stat row gets.
+    await tester.binding.setSurfaceSize(const Size(320, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    when(() => mockRepository.findAll()).thenAnswer((_) async => [
+          Walk(
+            id: 'w1',
+            startTime: DateTime(2026, 6, 1, 9, 0),
+            endTime: DateTime(2026, 6, 1, 11, 5),
+            duration: const Duration(hours: 2, minutes: 5, seconds: 30),
+            distanceMetres: 10234.5,
+          ),
+        ]);
+
+    await tester.pumpWidget(await buildSubject());
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('2:05:30'), findsOneWidget);
+  });
+
   testWidgets('renders a mini map with the stored route polyline',
       (tester) async {
     when(() => mockRepository.findAll()).thenAnswer((_) async => [

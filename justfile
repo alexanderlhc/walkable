@@ -46,6 +46,11 @@ analyze:
 test:
     {{flutter}} test
 
+# Run the integration tests on an emulator (installs the app, grants its
+# permissions and feeds a GPS fix first). Defaults to emulator-5554.
+integration device="emulator-5554":
+    tool/integration_test.sh {{device}}
+
 # Format all Dart sources.
 fmt:
     fvm dart format lib test
