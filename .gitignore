@@ -8,6 +8,8 @@ dart_defines.local.json
 *.class
 *.lock
 !/android/Gemfile.lock
+# Pin the exact package versions an app release is built from.
+!/pubspec.lock
 *.log
 *.pyc
 *.swp
