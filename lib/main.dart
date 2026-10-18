@@ -79,6 +79,10 @@ void main() async {
     recoveredWalkCount: recoveredWalks,
     batterySaverAlerts: batterySaverAlerts,
   ));
+  // The release smoke test (tool/release_smoke_test.sh) waits for this line:
+  // proof that startup got past the splash screen. Keep it in sync.
+  WidgetsBinding.instance.waitUntilFirstFrameRasterized
+      .then((_) => debugPrint('walkable: first frame rasterized'));
 }
 
 /// The supported locale matching the device language. Anything we don't

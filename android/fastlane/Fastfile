@@ -44,7 +44,13 @@ platform :android do
     Dir.chdir("../..") do
       # CARTO_API_KEY for the map tiles; `just carto-key` writes this file.
       UI.user_error!("dart_defines.local.json missing: run `just carto-key` (the map would be blank)") unless File.exist?("dart_defines.local.json")
+      # Without key.properties build.gradle falls back to the debug key (for
+      # CI's smoke test); a release must never be signed with it.
+      UI.user_error!("android/key.properties missing: the bundle would be debug-signed (just release-secrets)") unless File.exist?("android/key.properties")
       sh("flutter build appbundle --release --dart-define-from-file=dart_defines.local.json --build-name=#{build_name} --build-number=#{build_number}")
+      signer = sh("keytool -printcert -jarfile build/app/outputs/bundle/release/app-release.aab", log: false)
+      UI.user_error!("app-release.aab is signed with the Android debug key; refusing to upload") if signer.include?("CN=Android Debug")
+      UI.user_error!("app-release.aab is not signed; refusing to upload") unless signer.include?("Owner:")
     end
 
     upload_to_play_store(
