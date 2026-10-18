@@ -389,7 +389,7 @@ void main() {
 
     expect(find.byType(LicensePage), findsOneWidget);
     expect(find.text('Walkable'), findsOneWidget);
-    expect(find.text('1.2.3 (45)'), findsOneWidget);
+    expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
     expect(find.byKey(const Key('license_page_icon')), findsOneWidget);
   });
 

@@ -225,10 +225,10 @@ class _AboutTilesState extends State<_AboutTiles> {
               title: Text(l10n.settingsLicenses),
               onTap: () => showLicensePage(
                 context: context,
-                applicationName: 'Walkable',
+                applicationName: l10n.appTitle,
                 applicationVersion: info == null
                     ? null
-                    : '${info.version} (${info.buildNumber})',
+                    : l10n.settingsVersion(info.version, info.buildNumber),
                 applicationIcon: Padding(
                   padding: const EdgeInsets.all(8),
                   child: ClipRRect(

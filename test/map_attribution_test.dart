@@ -68,7 +68,7 @@ void main() {
 
       expect(textOf('OpenStreetMap'),
           allOf(contains('OpenStreetMap contributors'), contains('ODbL')));
-      expect(textOf('CARTO'), contains('CARTO'));
+      expect(textOf('CARTO'), contains('CARTO basemaps'));
     });
   });
 }
