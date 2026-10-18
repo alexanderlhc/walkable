@@ -26,8 +26,11 @@ jobs:
       - name: Test
         run: flutter test
 
-  # The integration tests on an Android emulator. No CARTO_API_KEY: nothing
-  # asserts on map tiles, which just render CARTO's watermark without it.
+  # The integration tests on an Android emulator, then the release smoke test
+  # on the same one. The integration tests get no CARTO_API_KEY: nothing
+  # asserts on map tiles, which just render CARTO's watermark without it. The
+  # smoke test gets it when the secret is there, to build like a release; PRs
+  # from forks have no secrets and an empty key passes too.
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -62,13 +65,17 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Integration tests
+      - name: Integration tests and release smoke test
         uses: reactivecircus/android-emulator-runner@v2
         env:
           FLUTTER: flutter
+          CARTO_API_KEY: ${{ secrets.CARTO_API_KEY }}
         with:
           api-level: 34
           target: google_apis
           arch: x86_64
           disable-animations: true
-          script: tool/integration_test.sh emulator-5554
+          # Each line runs on its own; the first failure fails the step.
+          script: |
+            tool/release_smoke_test.sh emulator-5554
+            tool/integration_test.sh emulator-5554

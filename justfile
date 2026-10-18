@@ -51,6 +51,12 @@ test:
 integration device="emulator-5554":
     tool/integration_test.sh {{device}}
 
+# Build a real release APK (R8 on; debug-signed without key.properties),
+# launch it on an emulator and fail unless it reaches its first frame without
+# throwing. Catches release-only startup crashes like 0.5.1's.
+smoke device="emulator-5554":
+    tool/release_smoke_test.sh {{device}}
+
 # Format all Dart sources.
 fmt:
     fvm dart format lib test
