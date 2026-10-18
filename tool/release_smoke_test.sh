@@ -39,6 +39,8 @@ elif [[ -n ${CARTO_API_KEY:-} ]]; then
 fi
 
 adb_() { adb -s "$DEVICE" "$@"; }
+# Blank out the CARTO key (it is in the map tile URLs) in logs we print.
+redact() { sed -E 's/key=[^&[:space:]]*/key=REDACTED/g'; }
 
 # Build only the device's ABI: smaller APK, faster build.
 case "$(adb_ shell getprop ro.product.cpu.abi | tr -d '\r')" in
@@ -49,22 +51,26 @@ esac
 
 $FLUTTER build apk --release --target-platform "$platform" "${defines[@]}"
 # Fresh install, as a new user gets it (and no signature clash with a
-# Play-signed copy).
+# Play-signed copy). Uninstalled again afterwards, so the integration tests
+# start clean and can install their debug build over nothing.
 adb_ uninstall "$PKG" >/dev/null 2>&1 || true
 adb_ install build/app/outputs/flutter-apk/app-release.apk
+trap 'adb_ uninstall "$PKG" >/dev/null 2>&1 || true' EXIT
 
 since=$(adb_ shell date +'%m-%d\ %H:%M:%S.000' | tr -d '\r')
 activity=$(adb_ shell cmd package resolve-activity --brief "$PKG" | tr -d '\r' | tail -1)
 # -W returns once the activity is launched, so the process exists.
 adb_ shell am start -W -n "$activity" >/dev/null
-pid=$(adb_ shell pidof "$PKG" | tr -d '\r')
-[[ -n $pid ]] || { echo "release smoke test FAILED: the app did not start" >&2; exit 1; }
+pid=$(adb_ shell pidof "$PKG" | tr -d '\r' || true)
+if [[ -z $pid ]]; then
+  echo "release smoke test FAILED: the app did not start" >&2
+  echo "--- logcat since launch (all processes) ---" >&2
+  adb_ logcat -d -T "$since" | redact | tail -n 150 >&2
+  exit 1
+fi
 
-# This process's logs (they outlive it), with the CARTO key in tile URLs
-# blanked out.
-app_log() {
-  adb_ logcat -d -T "$since" --pid "$pid" | sed -E 's/key=[^&[:space:]]*/key=REDACTED/g'
-}
+# This process's logs (they outlive it).
+app_log() { adb_ logcat -d -T "$since" --pid "$pid" | redact; }
 alive() { adb_ shell "[ -d /proc/$pid ]"; }
 
 fail() {
@@ -76,7 +82,7 @@ fail() {
 
 # Captured, not piped into grep -q: under pipefail an early-exiting grep
 # can fail the pipeline.
-check_errors() {
+reached_first_frame() {
   local log
   log=$(app_log)
   ! grep -qE "$ERRORS" <<<"$log" || fail "exception during startup"
@@ -84,7 +90,7 @@ check_errors() {
 }
 
 start=$SECONDS
-until check_errors; do
+until reached_first_frame; do
   alive || fail "the app died during startup"
   (( SECONDS - start < TIMEOUT )) || fail "no first frame within ${TIMEOUT}s (stuck on the splash screen?)"
   sleep 1
@@ -93,6 +99,6 @@ echo "first frame after $(( SECONDS - start ))s"
 
 # Errors right after the first frame (the rest of startup) count too.
 sleep 5
-check_errors
+reached_first_frame
 alive || fail "the app died after its first frame"
 echo "release smoke test passed"

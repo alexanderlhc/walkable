@@ -18,6 +18,7 @@ just run           # build and launch on a connected device
 just test          # unit and widget tests
 just analyze       # static analysis
 just integration   # integration tests on an emulator
+just smoke         # release build (R8) launch check on an emulator
 ```
 
 ### Map key
