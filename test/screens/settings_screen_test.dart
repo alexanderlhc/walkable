@@ -345,14 +345,64 @@ void main() {
     expect(find.text('Efter 4 timer'), findsOneWidget);
   });
 
-  testWidgets('shows the app version and build number at the bottom',
+  // ─── about ─────────────────────────────────────────────────────────────────
+
+  testWidgets('ends with an About section: version, privacy policy, licenses',
       (tester) async {
     await setUpController({});
     await tester.pumpWidget(buildSubject());
     await tester.pumpAndSettle();
 
-    await tester.scrollUntilVisible(find.text('Version 1.2.3 (45)'), 500);
+    await tester.scrollUntilVisible(find.byKey(const Key('licenses')), 500);
+    expect(find.text('About Walkable'), findsOneWidget);
     expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
+    expect(find.text('Privacy policy'), findsOneWidget);
+    expect(find.text('Open-source licenses'), findsOneWidget);
+  });
+
+  testWidgets('Privacy policy opens the policy in the browser', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const Key('privacy_policy'));
+    await tester.scrollUntilVisible(tile, 500);
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
+    await tester.tap(tile);
+
+    expect(powerSettings.openedPages,
+        [Uri.parse('https://alexanderlhc.github.io/walkable/')]);
+  });
+
+  testWidgets('Open-source licenses opens the license page', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject());
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const Key('licenses'));
+    await tester.scrollUntilVisible(tile, 500);
+    await tester.ensureVisible(tile);
+    await tester.pumpAndSettle();
+    await tester.tap(tile);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LicensePage), findsOneWidget);
+    expect(find.text('Walkable'), findsOneWidget);
+    expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
+    expect(find.byKey(const Key('license_page_icon')), findsOneWidget);
+  });
+
+  testWidgets('renders Danish About strings', (tester) async {
+    await setUpController({});
+    await tester.pumpWidget(buildSubject(locale: const Locale('da')));
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(find.byKey(const Key('licenses')), 500);
+    expect(find.text('Om Walkable'), findsOneWidget);
+    expect(find.text('Version 1.2.3 (45)'), findsOneWidget);
+    expect(find.text('Privatlivspolitik'), findsOneWidget);
+    expect(find.text('Open source-licenser'), findsOneWidget);
   });
 
   // ─── background tracking ───────────────────────────────────────────────────

@@ -37,3 +37,6 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
+  assets:
+    # The license page's app icon; written by docs/icon/generate.sh.
+    - assets/app_icon.png

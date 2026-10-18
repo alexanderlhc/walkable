@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -14,6 +15,24 @@ final Uri cartoAttributionUrl = Uri.parse('https://carto.com/attributions');
 /// The tile credit CARTO's basemap terms ask for, verbatim. It is a legal
 /// credit rather than UI copy, so it stays the same in every locale.
 const String mapCreditText = '© OpenStreetMap contributors, © CARTO';
+
+/// Adds the map's data and tile credits to Flutter's [LicenseRegistry], so
+/// the open-source licenses page lists them alongside the packages. Call
+/// once, at startup.
+void registerMapDataLicenses() {
+  LicenseRegistry.addLicense(() => Stream.fromIterable([
+        LicenseEntryWithLineBreaks(['OpenStreetMap'], '''
+Map data © OpenStreetMap contributors.
+
+The map data is available under the Open Database License (ODbL) v1.0: https://opendatacommons.org/licenses/odbl/1-0/
+
+See $osmCopyrightUrl'''),
+        LicenseEntryWithLineBreaks(['CARTO'], '''
+Map tiles © CARTO, from CARTO basemaps, used under CARTO's basemap terms.
+
+See $cartoAttributionUrl'''),
+      ]));
+}
 
 /// The full map credit for an interactive map: flutter_map's
 /// [SimpleAttributionWidget] reading "© OpenStreetMap contributors, © CARTO",

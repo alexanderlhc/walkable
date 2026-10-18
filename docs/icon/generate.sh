@@ -35,4 +35,7 @@ for dpi in "${!LEGACY[@]}"; do
     "$dir/ic_launcher_foreground.png"
 done
 
-echo "Icons regenerated under $ROOT"
+# In-app copy of the square icon, shown on the open-source licenses page.
+rsvg-convert -w 192 -h 192 icon_master.svg -o ../../assets/app_icon.png
+
+echo "Icons regenerated under $ROOT and assets/app_icon.png"

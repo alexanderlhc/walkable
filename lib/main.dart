@@ -9,6 +9,7 @@ import 'package:walkable/auto_stop_notifications.dart';
 import 'package:walkable/battery_saver_notifications.dart';
 import 'package:walkable/l10n/app_localizations.dart';
 import 'package:walkable/location/location_service.dart';
+import 'package:walkable/map_attribution.dart';
 import 'package:walkable/models/walk.dart';
 import 'package:walkable/repository/settings_repository.dart';
 import 'package:walkable/repository/walk_repository.dart';
@@ -20,6 +21,7 @@ import 'package:walkable/walk_recorder.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerMapDataLicenses();
   // Draw behind the system bars on every Android version. Android 15+ enforces
   // edge-to-edge anyway, but enabling it here (not only natively) makes it
   // consistent for users on Android 14 and below too — the gap behind Play

@@ -155,5 +155,11 @@
   "settingsBackgroundTracking": "Background tracking",
   "settingsBatterySaverSubtitle": "Battery Saver can turn off location while the screen is locked.",
   "settingsManufacturerHelp": "Keep walks recording",
-  "settingsManufacturerHelpSubtitle": "Your phone's own battery manager may stop Walkable in the background. dontkillmyapp.com shows how to prevent it."
+  "settingsManufacturerHelpSubtitle": "Your phone's own battery manager may stop Walkable in the background. dontkillmyapp.com shows how to prevent it.",
+  "settingsAbout": "About Walkable",
+  "settingsPrivacyPolicy": "Privacy policy",
+  "settingsLicenses": "Open-source licenses",
+  "@settingsLicenses": {
+    "description": "Opens the list of the open-source packages and map data Walkable uses, with their licenses."
+  }
 }

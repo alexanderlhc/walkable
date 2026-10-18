@@ -331,4 +331,13 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsManufacturerHelpSubtitle =>
       'Your phone\'s own battery manager may stop Walkable in the background. dontkillmyapp.com shows how to prevent it.';
+
+  @override
+  String get settingsAbout => 'About Walkable';
+
+  @override
+  String get settingsPrivacyPolicy => 'Privacy policy';
+
+  @override
+  String get settingsLicenses => 'Open-source licenses';
 }

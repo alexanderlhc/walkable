@@ -20,6 +20,7 @@ bash docs/icon/generate.sh
 ```
 This rewrites the legacy `ic_launcher.png` and the adaptive `ic_launcher_foreground.png`
 / `ic_launcher_background.png` layers under `android/app/src/main/res/mipmap-*`.
-The adaptive descriptor lives at `mipmap-anydpi-v26/ic_launcher.xml`.
+The adaptive descriptor lives at `mipmap-anydpi-v26/ic_launcher.xml`. It also
+writes `assets/app_icon.png`, the icon shown on the in-app licenses page.
 
 Requires `rsvg-convert` and ImageMagick. Rebuild the app to see the new icon.
