@@ -7,8 +7,9 @@
 #   tool/release_smoke_test.sh [device-id]    # default emulator-5554
 #
 # Debug builds skip R8, so only this catches release-only startup breakage:
-# 0.5.1 hung on the splash screen because R8 stripped methods that
-# shared_preferences_android 2.5.0 calls through JNI. Its process stayed
+# 0.5.1 hung on the splash screen because R8 renamed Kotlin classes that
+# shared_preferences_android 2.5.0 calls through JNI (now kept in
+# android/app/proguard-rules.pro). Its process stayed
 # alive, so this waits for the line main() logs once the first frame is
 # rasterized rather than for the process.
 #

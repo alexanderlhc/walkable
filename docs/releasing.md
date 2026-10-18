@@ -11,8 +11,9 @@ committed for a release:
 ## Before a release: the smoke test
 
 Debug builds skip R8, so a release build can break where every test passes:
-0.5.1 hung on the splash screen because R8 stripped methods that
-`shared_preferences_android` 2.5.0 calls through JNI. CI's `integration` job
+0.5.1 hung on the splash screen because R8 renamed Kotlin classes that
+`shared_preferences_android` 2.5.0 calls through JNI (now kept in
+`android/app/proguard-rules.pro`). CI's `integration` job
 therefore also runs `tool/release_smoke_test.sh` on every PR: it builds a
 `--release` APK (R8 and resource shrinking on, the CARTO key when the secret
 is available), installs it fresh on the emulator, launches it, and fails

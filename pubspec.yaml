@@ -37,11 +37,3 @@ dev_dependencies:
 flutter:
   generate: true
   uses-material-design: true
-
-# shared_preferences_android 2.5.0 (Pigeon JNI) crashes release builds on
-# startup: R8 strips the Kotlin methods it calls through JNI, so
-# SharedPreferences.getInstance() throws NoSuchMethodError and the app hangs
-# on the splash screen (0.5.1). Lift this once a fixed version is out and a
-# release build has been checked on a device.
-dependency_overrides:
-  shared_preferences_android: 2.4.28
