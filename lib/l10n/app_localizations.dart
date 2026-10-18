@@ -619,6 +619,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your phone\'s own battery manager may stop Walkable in the background. dontkillmyapp.com shows how to prevent it.'**
   String get settingsManufacturerHelpSubtitle;
+
+  /// No description provided for @settingsAbout.
+  ///
+  /// In en, this message translates to:
+  /// **'About Walkable'**
+  String get settingsAbout;
+
+  /// No description provided for @settingsPrivacyPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy policy'**
+  String get settingsPrivacyPolicy;
+
+  /// Opens the list of the open-source packages and map data Walkable uses, with their licenses.
+  ///
+  /// In en, this message translates to:
+  /// **'Open-source licenses'**
+  String get settingsLicenses;
 }
 
 class _AppLocalizationsDelegate

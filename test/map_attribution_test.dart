@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:walkable/map_attribution.dart';
@@ -41,5 +42,33 @@ void main() {
         const MaterialApp(home: Scaffold(body: CompactMapAttribution())));
 
     expect(find.text('© OpenStreetMap contributors, © CARTO'), findsOneWidget);
+  });
+
+  group('map data licenses', () {
+    setUp(LicenseRegistry.reset);
+    tearDown(LicenseRegistry.reset);
+
+    testWidgets('are listed on the license page', (tester) async {
+      registerMapDataLicenses();
+      await tester.pumpWidget(const MaterialApp(home: LicensePage()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('OpenStreetMap'), findsOneWidget);
+      expect(find.text('CARTO'), findsOneWidget);
+    });
+
+    test('credit OSM contributors under the ODbL and CARTO basemaps', () async {
+      registerMapDataLicenses();
+      final licenses = await LicenseRegistry.licenses.toList();
+      String textOf(String package) => licenses
+          .singleWhere((l) => l.packages.contains(package))
+          .paragraphs
+          .map((p) => p.text)
+          .join('\n');
+
+      expect(textOf('OpenStreetMap'),
+          allOf(contains('OpenStreetMap contributors'), contains('ODbL')));
+      expect(textOf('CARTO'), contains('CARTO'));
+    });
   });
 }

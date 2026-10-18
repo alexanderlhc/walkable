@@ -6,6 +6,10 @@ import 'package:walkable/power_settings.dart';
 import 'package:walkable/settings_controller.dart';
 import 'package:walkable/units.dart';
 
+/// Walkable's privacy policy, published from docs/ on GitHub Pages.
+final Uri privacyPolicyUrl =
+    Uri.parse('https://alexanderlhc.github.io/walkable/');
+
 class SettingsScreen extends StatelessWidget {
   final SettingsController controller;
 
@@ -130,7 +134,8 @@ class SettingsScreen extends StatelessWidget {
               onTap: powerSettings.openBatterySaverSettings,
             ),
             _ManufacturerHelpTile(powerSettings),
-            const _VersionFooter(),
+            _SectionHeader(l10n.settingsAbout),
+            _AboutTiles(powerSettings),
           ],
         ),
       ),
@@ -175,28 +180,66 @@ class _ManufacturerHelpTileState extends State<_ManufacturerHelpTile> {
   }
 }
 
-/// De-emphasized "Version x.y.z (build)" line at the bottom of the list.
-class _VersionFooter extends StatelessWidget {
-  const _VersionFooter();
+/// The About section's rows: the version, the privacy policy and the
+/// open-source licenses.
+class _AboutTiles extends StatefulWidget {
+  /// Opens the privacy policy, like the dontkillmyapp.com link.
+  final PowerSettings powerSettings;
+
+  const _AboutTiles(this.powerSettings);
+
+  @override
+  State<_AboutTiles> createState() => _AboutTilesState();
+}
+
+class _AboutTilesState extends State<_AboutTiles> {
+  // Fetched once: the settings list rebuilds on every setting change.
+  late final Future<PackageInfo> _info = PackageInfo.fromPlatform();
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context)!;
 
     return FutureBuilder<PackageInfo>(
-      future: PackageInfo.fromPlatform(),
+      future: _info,
       builder: (context, snapshot) {
         final info = snapshot.data;
-        if (info == null) return const SizedBox.shrink();
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
-          child: Text(
-            l10n.settingsVersion(info.version, info.buildNumber),
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall!
-                .copyWith(color: theme.colorScheme.outline),
-          ),
+        return Column(
+          children: [
+            if (info != null)
+              ListTile(
+                key: const Key('version'),
+                leading: const Icon(Icons.info_outline),
+                title:
+                    Text(l10n.settingsVersion(info.version, info.buildNumber)),
+              ),
+            ListTile(
+              key: const Key('privacy_policy'),
+              leading: const Icon(Icons.privacy_tip_outlined),
+              title: Text(l10n.settingsPrivacyPolicy),
+              onTap: () => widget.powerSettings.openPage(privacyPolicyUrl),
+            ),
+            ListTile(
+              key: const Key('licenses'),
+              leading: const Icon(Icons.description_outlined),
+              title: Text(l10n.settingsLicenses),
+              onTap: () => showLicensePage(
+                context: context,
+                applicationName: 'Walkable',
+                applicationVersion: info == null
+                    ? null
+                    : '${info.version} (${info.buildNumber})',
+                applicationIcon: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: ClipRRect(
+                    key: const Key('license_page_icon'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Image.asset('assets/app_icon.png', width: 64),
+                  ),
+                ),
+              ),
+            ),
+          ],
         );
       },
     );

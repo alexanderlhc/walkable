@@ -331,4 +331,13 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get settingsManufacturerHelpSubtitle =>
       'Din telefons egen batteristyring kan stoppe Walkable i baggrunden. dontkillmyapp.com viser, hvordan du forhindrer det.';
+
+  @override
+  String get settingsAbout => 'Om Walkable';
+
+  @override
+  String get settingsPrivacyPolicy => 'Privatlivspolitik';
+
+  @override
+  String get settingsLicenses => 'Open source-licenser';
 }
